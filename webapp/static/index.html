@@ -3,192 +3,147 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Job Hunt</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<title>Job Hunt Dashboard</title>
 <style>
   :root {
     --bg: #ffffff; --surface: #f4f6f5; --chip: #e7ebe9; --line: #d9dfdc;
     --fg: #212d2d; --accent: #363f3a; --muted: #66726b;
     --apply: #2f6b4f; --long: #8a6d1f; --skip: #8c3b3b; --run: #2d5b8a;
+    /* chart roles (dataviz reference palette, same as the Tracker) */
+    --chart-surface: #fcfcfb; --ink-2: #52514e; --ink-muted: #898781; --grid: #e6e5e0;
+    --series-1: #2a78d6;   /* tailored */
+    --series-2: #eb6834;   /* applied */
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg);
-         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 96px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 64px; }
+  nav { display: flex; gap: 6px; margin-bottom: 18px; }
+  nav a { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); }
+  nav a.active { background: var(--accent); color: #fff; }
+  nav a:not(.active):hover { background: var(--chip); }
   h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
-  nav.pages { display: flex; gap: 6px; margin-bottom: 18px; }
-  nav.pages a { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); }
-  nav.pages a.active { background: var(--accent); color: #fff; }
-  nav.pages a:not(.active):hover { background: var(--chip); }
-  h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); margin: 4px 0 24px; }
-  section { border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
-  label { cursor: pointer; }
-  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-  .col { flex: 1 1 260px; }
-  .field-title { font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase;
-                 letter-spacing: .04em; margin-bottom: 6px; }
-  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-  textarea, input[type=text], select { font: inherit; color: inherit; border: 1px solid var(--line);
-         border-radius: 6px; padding: 6px 8px; background: var(--bg); }
-  textarea { width: 100%; min-height: 120px; resize: vertical; }
-  button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: #fff;
-           border-radius: 6px; padding: 7px 14px; cursor: pointer; }
-  button.ghost { background: var(--bg); color: var(--accent); border-color: var(--line); }
-  button:disabled { opacity: .5; cursor: default; }
-  .log { background: var(--surface); border-radius: 6px; padding: 8px 10px; font: 12px/1.4 ui-monospace, monospace;
-         max-height: 140px; overflow: auto; white-space: pre-wrap; margin-top: 12px; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
-  .toolbar .grow { flex: 1; }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
-  td.num { font-variant-numeric: tabular-nums; text-align: right; }
-  tr:hover td { background: var(--surface); }
+  h2 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 4px 0 20px; }
+  section { border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 20px; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .head .grow { flex: 1; }
+  .small { font-size: 12px; color: var(--muted); }
   a { color: var(--accent); text-decoration-color: var(--line); text-underline-offset: 3px; }
   a:hover { text-decoration-color: currentColor; }
+  button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); color: var(--accent);
+           border-radius: 6px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .count { display: inline-block; min-width: 22px; text-align: center; font-size: 12px; font-weight: 600; padding: 0 7px;
+           border-radius: 999px; background: var(--chip); }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; text-decoration: none; color: inherit; }
+  a.kpi:hover { border-color: var(--accent); }
+  .kpi .label { font-size: 13px; color: var(--muted); }
+  .kpi .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+  .kpi .note { font-size: 12px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+  /* lists */
+  ul.items { list-style: none; margin: 0; padding: 0; }
+  ul.items li { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  ul.items li:last-child { border-bottom: 0; }
+  ul.items .what { flex: 1; min-width: 0; }
+  ul.items .what strong { font-weight: 600; }
+  ul.items .what .role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul.items .files a { font-size: 13px; margin-right: 8px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+  .late { color: var(--long); font-weight: 600; }
   .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
           background: var(--chip); color: var(--accent); white-space: nowrap; }
-  .pill.Apply, .pill.done { background: #e2efe8; color: var(--apply); }
+  .pill.Apply { background: #e2efe8; color: var(--apply); }
   .pill.Long { background: #f4ecd6; color: var(--long); }
   .pill.Skip, .pill.failed { background: #f3e1e1; color: var(--skip); }
-  .pill.running, .pill.queued { background: #e1eaf4; color: var(--run); }
-  .small { font-size: 12px; color: var(--muted); }
+  .pill.running { background: #e1eaf4; color: var(--run); }
   .new { font-size: 11px; font-weight: 700; color: var(--run); margin-left: 4px; }
-  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
-         padding: 10px 16px; display: none; }
-  .bar.show { display: block; }
-  .bar .inner { max-width: 1400px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .cards { display: grid; gap: 12px; }
-  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
-  .card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-  .card-head strong { flex: 1 1 300px; }
-  .links { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
-  .report { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 14px; }
-  .report table { font-size: 13px; }
-  .error { color: var(--skip); white-space: pre-wrap; font-size: 13px; margin-top: 6px; }
-  .empty { color: var(--muted); }
-  details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin-top: 8px; }
-  .dropdown { position: relative; }
-  .dropdown summary { list-style: none; margin: 0; min-width: 200px; border: 1px solid var(--line); border-radius: 6px;
-                      padding: 6px 30px 6px 8px; color: var(--fg); font-size: 15px; background: var(--bg); position: relative; }
-  .dropdown summary::-webkit-details-marker { display: none; }
-  .dropdown summary::after { content: "▾"; position: absolute; right: 10px; color: var(--muted); }
-  .dropdown .menu { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 100%; background: var(--bg);
-                    border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-  .dropdown .menu label { display: block; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
-  .dropdown .menu label:hover { background: var(--surface); }
-  select { padding: 6px 8px; }
-  .companies { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
-  .companies > summary { font-weight: 600; color: var(--fg); }
-  .add-row { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
-  .add-row input { flex: 1 1 320px; }
-  .company-result { background: var(--surface); border-radius: 6px; padding: 10px 12px; font-size: 14px;
-                    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .company-result.ok { background: #e2efe8; }
-  .company-result.warn { background: #f4ecd6; }
-  .company-result.bad { background: #f3e1e1; }
-  .company-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .company-list .pill { font-weight: 500; }
-  .company-list .sys { color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .score { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; width: 28px; text-align: right; }
+  .banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; font-size: 14px; }
+  .banner.run { background: #e1eaf4; color: var(--run); }
+  .banner.bad { background: #f3e1e1; color: var(--skip); }
+
+  /* weekly chart */
+  .chart-wrap { background: var(--chart-surface); border-radius: 8px; margin-top: 8px; padding: 4px 0; }
+  #weekly { display: block; width: 100%; }
+  #weekly text { font-size: 12px; fill: var(--ink-muted); }
+  #weekly .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+  #weekly .val { fill: var(--ink-2); font-weight: 600; }
+  #weekly .band { fill: transparent; }
+  #weekly .band:hover, #weekly .band.hl { fill: rgba(0, 0, 0, .035); }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                         margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .tooltip { position: fixed; pointer-events: none; background: #fff; border: 1px solid var(--line); border-radius: 6px;
+             padding: 6px 9px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.08); display: none; z-index: 10; }
+  .tooltip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .verdicts { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; }
 </style>
 </head>
 <body>
 <main>
-  <nav class="pages"><a href="/" class="active">Job Hunt</a><a href="/tracker.html">Tracker</a></nav>
-  <h1>Job Hunt</h1>
-  <p class="sub" id="cv-info">Loading…</p>
+  <nav><a href="/" class="active">Dashboard</a><a href="/search.html">Search</a><a href="/tracker.html">Tracker</a></nav>
+  <h1>Dashboard</h1>
+  <p class="sub" id="today">Loading…</p>
 
-  <section>
-    <h2>1. Search</h2>
-    <div class="row">
-      <div class="col">
-        <div class="row" style="gap:12px">
-          <div>
-            <div class="field-title">Countries</div>
-            <details class="dropdown" id="countries-dd">
-              <summary id="countries-label">Spain</summary>
-              <div class="menu" id="countries"></div>
-            </details>
-          </div>
-          <div>
-            <div class="field-title">Posted within</div>
-            <select id="max-age">
-              <option value="1">24 hours</option>
-              <option value="3">3 days</option>
-              <option value="7" selected>1 week</option>
-              <option value="30">1 month</option>
-            </select>
-          </div>
-        </div>
-        <div class="checks" style="margin-top:14px">
-          <label><input type="checkbox" id="include-skips"> Include Skip verdicts</label>
-        </div>
-      </div>
-      <div class="col">
-        <div class="field-title">Keywords (one per line)</div>
-        <textarea id="terms"></textarea>
-      </div>
-    </div>
-    <div class="toolbar" style="margin-top:12px">
-      <button id="search-btn">Search jobs</button>
-      <span class="small">Takes about 2 minutes.</span>
-      <span class="grow"></span>
-      <label class="small">or open an earlier search
-        <select id="runs"></select></label>
-    </div>
-    <div class="log" id="search-log" hidden></div>
+  <div id="banners"></div>
+  <div class="kpis" id="kpis"></div>
 
-    <details class="companies" id="companies-panel">
-      <summary id="companies-summary">Companies searched</summary>
-      <div class="add-row">
-        <input type="text" id="company-input" placeholder="Company name, or paste a link to one of its jobs">
-        <button id="company-check">Check</button>
-      </div>
-      <div id="company-result" class="company-result" hidden></div>
-      <div id="company-list" class="company-list"></div>
-    </details>
-  </section>
+  <div class="grid">
+    <div>
+      <section>
+        <div class="head"><h2>Ready to send</h2><span class="count" id="send-count"></span><span class="grow"></span>
+          <a class="small" href="/tracker.html">All in Tracker →</a></div>
+        <div class="small">Tailored but not marked as applied yet, newest first.</div>
+        <ul class="items" id="to-send"></ul>
+      </section>
 
-  <section>
-    <h2>2. Shortlist <span class="small" id="run-name"></span></h2>
-    <div class="toolbar">
-      <input type="text" id="filter" placeholder="Filter by company, title or city…" style="min-width:260px">
-      <label><input type="checkbox" class="vfilter" value="Apply" checked> Apply</label>
-      <label><input type="checkbox" class="vfilter" value="Long shot" checked> Long shot</label>
-      <label><input type="checkbox" class="vfilter" value="Skip" checked> Skip</label>
-      <span class="grow"></span>
-      <span class="small" id="count"></span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th><input type="checkbox" id="check-all" title="Select all shown"></th>
-          <th>Verdict</th><th>Score</th><th>Company</th><th>Title</th><th>Location</th>
-          <th>Posted</th><th>Flags / gaps</th><th>Tailored</th>
-        </tr></thead>
-        <tbody id="jobs"><tr><td colspan="9" class="empty">Run a search or open an earlier one.</td></tr></tbody>
-      </table>
-    </div>
-  </section>
+      <section>
+        <div class="head"><h2>Follow up</h2><span class="count" id="follow-count"></span></div>
+        <div class="small" id="follow-sub"></div>
+        <ul class="items" id="follow-up"></ul>
+      </section>
 
-  <section>
-    <h2>3. Tailored applications</h2>
-    <div class="cards" id="tasks"><p class="empty">Nothing tailored yet.</p></div>
-  </section>
+      <section>
+        <div class="head"><h2>Interviews &amp; offers</h2><span class="count" id="active-count"></span></div>
+        <ul class="items" id="active"></ul>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <div class="head"><h2>Weekly activity</h2><span class="grow"></span>
+          <div class="legend"><span style="--c: var(--series-1)">Tailored</span><span style="--c: var(--series-2)">Applied</span></div></div>
+        <div class="small">Last 12 weeks. Tailored counts by analysis date, applied by the applied-on date.</div>
+        <div class="chart-wrap"><svg id="weekly" role="img" aria-labelledby="weekly-desc"><desc id="weekly-desc"></desc></svg></div>
+        <details>
+          <summary>Show as a table</summary>
+          <table><thead><tr><th>Week of</th><th class="num">Tailored</th><th class="num">Applied</th></tr></thead>
+            <tbody id="weekly-table"></tbody></table>
+        </details>
+      </section>
+
+      <section>
+        <div class="head"><h2>Latest search</h2><span class="grow"></span>
+          <a class="small" href="/search.html">New search →</a></div>
+        <div id="latest"></div>
+      </section>
+    </div>
+  </div>
 </main>
-
-<div class="bar" id="bar"><div class="inner">
-  <strong id="sel-count"></strong>
-  <label>Model <select id="model">
-    <option value="">Default (Claude Code's model)</option>
-    <option value="sonnet">Sonnet (lighter on limits)</option>
-  </select></label>
-  <button id="apply-btn">Tailor CV + cover letter</button>
-  <button class="ghost" id="clear-btn">Clear selection</button>
-  <span class="small" id="limit-note"></span>
-</div></div>
+<div class="tooltip" id="tooltip"></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -198,256 +153,177 @@ const api = async (url, opts = {}) => {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };
-const remember = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-const recall = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const plural = (n, w) => `${n} ${n === 1 ? w : w.endsWith("h") ? w + "es" : w + "s"}`;
+const fmtDate = (iso, opts = {day: "numeric", month: "short"}) =>
+  new Date(iso + "T00:00:00").toLocaleDateString(undefined, opts);
+const FILE_LABEL = {"cv.pdf": "CV", "cover_letter.pdf": "Letter", "analysis.md": "Analysis"};
+const files = (r) => r.files.map((f) =>
+  `<a href="/output/${encodeURIComponent(r.folder)}/${encodeURIComponent(f)}" target="_blank">${FILE_LABEL[f]}</a>`).join("");
 
-let run = null, jobs = [], selected = new Set(), tasks = [], settings = null;
+let data = null;
 
-async function init() {
-  settings = await api("/api/settings");
-  $("#cv-info").innerHTML = `Tailoring uses <code>${esc(settings.cv.path)}</code> (last edited ${esc(settings.cv.modified)}). ` +
-    `Up to ${settings.max_parallel} applications run at once.`;
-  const saved = recall("search", {});
-  const defaultCountry = settings.countries.includes("Spain") ? "Spain" : settings.countries[0];
-  $("#countries").innerHTML = settings.countries.map((c) =>
-    `<label><input type="checkbox" value="${esc(c)}" ${c === defaultCountry ? "checked" : ""}> ${esc(c)}</label>`).join("");
-  updateCountriesLabel();
-  $("#terms").value = (saved.terms || settings.search_terms).join("\n");
-  if (saved.max_age_days) $("#max-age").value = String(saved.max_age_days);
-  $("#include-skips").checked = !!saved.include_skips;
-  $("#limit-note").textContent = "Each run takes ~3 min and counts against your Claude usage limits.";
-  await loadRuns();
-  await refreshTasks();
+// ------------------------------------------------------------------ KPIs
+function renderKpis(s) {
+  const tile = (label, value, note = "", href = "/tracker.html") =>
+    `<a class="kpi" href="${href}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="note">${esc(note)}</div></a>`;
+  const thisWeek = data.weekly[data.weekly.length - 1];
+  $("#kpis").innerHTML =
+    tile("Applied", s.applied, `${thisWeek.applied} this week`) +
+    tile("Ready to send", data.to_send_total, `of ${s.tailored} tailored`) +
+    tile("Response rate", s.response_rate == null ? "–" : `${s.response_rate}%`, `${s.responded} of ${s.applied} replied`) +
+    tile("Interviews", s.interviews, "") +
+    tile("Offers", s.offers, "");
 }
 
-async function loadRuns(select) {
-  const runs = await api("/api/runs");
-  $("#runs").innerHTML = `<option value="">—</option>` +
-    runs.map((r) => `<option value="${esc(r.name)}">${esc(r.label)}</option>`).join("");
-  const names = runs.map((r) => r.name);
-  const pick = select || recall("run", names[0]);
-  if (pick && names.includes(pick)) { $("#runs").value = pick; await openRun(pick); }
+// ------------------------------------------------------------------ action lists
+function renderLists() {
+  $("#send-count").textContent = data.to_send_total;
+  $("#to-send").innerHTML = data.to_send.map((r) => `<li data-folder="${esc(r.folder)}">
+      <div class="what"><strong>${esc(r.company)}</strong> <span class="small">${esc(fmtDate(r.date))}</span>
+        <div class="role" title="${esc(r.role)}">${esc(r.role)}${r.location ? ` <span class="small">· ${esc(r.location)}</span>` : ""}</div>
+        <div class="files">${files(r)}</div></div>
+      <button data-status="applied" title="Set the status to Applied, dated today">Mark applied</button></li>`).join("")
+    + (data.to_send_total > data.to_send.length
+      ? `<li><a class="small" href="/tracker.html">${data.to_send_total - data.to_send.length} more in the Tracker →</a></li>` : "")
+    || `<li class="empty">Nothing waiting. Tailor a few jobs from the <a href="/search.html">Search</a> page.</li>`;
+
+  $("#follow-count").textContent = data.follow_up_total;
+  $("#follow-sub").textContent = `Applied ${data.follow_up_days}+ days ago and still waiting, oldest first. After 30 days, consider marking it No response.`;
+  $("#follow-up").innerHTML = data.follow_up.map((r) => `<li data-folder="${esc(r.folder)}">
+      <div class="what"><strong>${esc(r.company)}</strong>
+        <div class="role" title="${esc(r.role)}">${esc(r.role)}</div>
+        <div class="small">Applied ${esc(fmtDate(r.applied_on))} · <span class="${r.days >= 30 ? "late" : ""}">${plural(r.days, "day")} ago</span></div></div>
+      <button data-status="no_response">No response</button>
+      <button data-status="rejected">Rejected</button>
+      <button data-status="interview">Interview</button></li>`).join("")
+    || `<li class="empty">No application has been waiting more than ${data.follow_up_days} days.</li>`;
+
+  $("#active-count").textContent = data.active.length;
+  $("#active").innerHTML = data.active.map((r) => `<li>
+      <div class="what"><strong>${esc(r.company)}</strong>
+        <div class="role" title="${esc(r.role)}">${esc(r.role)}</div>
+        ${r.notes ? `<div class="small">${esc(r.notes)}</div>` : ""}</div>
+      <span class="pill">${r.status === "offer" ? "✓ " : ""}${esc(r.status_label)}</span></li>`).join("")
+    || `<li class="empty">None yet. Set a status to Interviewing in the <a href="/tracker.html">Tracker</a> and it shows here.</li>`;
 }
 
-async function openRun(name) {
-  if (!name) return;
-  const data = await api(`/api/runs/${encodeURIComponent(name)}`);
-  run = name; jobs = data.jobs; selected.clear();
-  remember("run", name);
-  $("#run-name").textContent = `· ${data.label}`;
-  renderJobs();
-}
-
-function visibleJobs() {
-  const q = $("#filter").value.trim().toLowerCase();
-  const verdicts = [...document.querySelectorAll(".vfilter:checked")].map((c) => c.value);
-  return jobs.filter((j) => verdicts.includes(j.verdict) &&
-    (!q || `${j.company} ${j.title} ${j.location}`.toLowerCase().includes(q)));
-}
-
-function renderJobs() {
-  const shown = visibleJobs();
-  $("#count").textContent = `${shown.length} of ${jobs.length} postings`;
-  const byTask = Object.fromEntries(tasks.map((t) => [t.id, t]));
-  $("#jobs").innerHTML = shown.length ? shown.map((j) => {
-    const t = j.task && byTask[j.task];
-    const status = t ? `<a href="#task-${t.id}" class="pill ${t.status}">${t.status === "done" ? "✓ done" : t.status}</a>` : "";
-    const flags = [j.flags, j.gaps && `gaps: ${j.gaps}`].filter(Boolean).join("; ");
-    return `<tr>
-      <td><input type="checkbox" data-file="${esc(j.file)}" ${selected.has(j.file) ? "checked" : ""}></td>
-      <td><span class="pill ${esc(j.verdict.split(" ")[0])}">${esc(j.verdict)}</span></td>
-      <td class="num">${esc(j.score)}</td>
-      <td>${esc(j.company)}</td>
-      <td><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>${j.new ? '<span class="new">NEW</span>' : ""}
-          <div class="small"><a href="/api/runs/${encodeURIComponent(run)}/jobs/${encodeURIComponent(j.file)}" target="_blank">posting text</a></div></td>
-      <td class="small">${esc(j.location.split("; ").filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 3).join("; "))}</td>
-      <td class="small" style="white-space:nowrap">${esc(j.posted)}</td>
-      <td class="small">${esc(flags)}</td>
-      <td>${status}</td></tr>`;
-  }).join("") : `<tr><td colspan="9" class="empty">No postings match.</td></tr>`;
-  updateBar();
-}
-
-function updateBar() {
-  $("#sel-count").textContent = `${selected.size} selected`;
-  $("#bar").classList.toggle("show", selected.size > 0);
-}
-
-$("#jobs").addEventListener("change", (e) => {
-  const f = e.target.dataset.file;
-  if (!f) return;
-  e.target.checked ? selected.add(f) : selected.delete(f);
-  updateBar();
-});
-$("#check-all").addEventListener("change", (e) => {
-  visibleJobs().forEach((j) => e.target.checked ? selected.add(j.file) : selected.delete(j.file));
-  renderJobs();
-});
-$("#filter").addEventListener("input", renderJobs);
-document.querySelectorAll(".vfilter").forEach((c) => c.addEventListener("change", renderJobs));
-$("#runs").addEventListener("change", (e) => openRun(e.target.value));
-$("#clear-btn").addEventListener("click", () => { selected.clear(); $("#check-all").checked = false; renderJobs(); });
-
-const chosenCountries = () => [...document.querySelectorAll("#countries input:checked")].map((c) => c.value);
-function updateCountriesLabel() {
-  const c = chosenCountries();
-  $("#countries-label").textContent = c.length ? c.join(", ") : "Choose countries…";
-}
-$("#countries").addEventListener("change", updateCountriesLabel);
-document.addEventListener("click", (e) => {     // close the dropdown when clicking elsewhere
-  if (!$("#countries-dd").contains(e.target)) $("#countries-dd").open = false;
-});
-
-$("#search-btn").addEventListener("click", async () => {
-  const body = {
-    countries: chosenCountries(),
-    terms: $("#terms").value.split("\n").map((t) => t.trim()).filter(Boolean),
-    max_age_days: Number($("#max-age").value), include_skips: $("#include-skips").checked,
-  };
-  if (!body.countries.length) { alert("Choose at least one country."); return; }
-  remember("search", body);
-  const log = $("#search-log");
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-status]");
+  if (!btn) return;
+  const li = btn.closest("li[data-folder]");
+  li.querySelectorAll("button").forEach((b) => b.disabled = true);
   try {
-    $("#search-btn").disabled = true;
-    log.hidden = false; log.textContent = "Starting search…";
-    run = null; jobs = []; selected.clear(); updateBar();       // don't leave an old list on screen
-    $("#runs").value = "";
-    $("#run-name").textContent = "· searching…";
-    $("#count").textContent = "";
-    $("#jobs").innerHTML = `<tr><td colspan="9" class="empty">Searching… results will appear here when the search finishes.</td></tr>`;
-    let s = await api("/api/search", {method: "POST", body: JSON.stringify(body)});
-    while (s.status === "running") {
-      await new Promise((r) => setTimeout(r, 2000));
-      s = await api(`/api/search/${s.id}`);
-      log.textContent = s.log.join("\n") || "Searching…";
-      log.scrollTop = log.scrollHeight;
-    }
-    if (s.status === "done") { log.textContent += `\n\nDone in ${s.seconds}s.`; await loadRuns(s.run); }
-    else log.textContent += "\n\nSearch failed — see the log above.";
-  } catch (err) { log.hidden = false; log.textContent = `Error: ${err.message}`; }
-  finally { $("#search-btn").disabled = false; }
-});
-
-$("#apply-btn").addEventListener("click", async () => {
-  const files = [...selected];
-  const already = jobs.filter((j) => files.includes(j.file) && j.task).length;
-  const msg = `Tailor ${files.length} application(s)?` +
-    (already ? `\n${already} already tailored — running again replaces today's folder for that job.` : "") +
-    `\nEach takes ~3 min and counts against your Claude usage limits.`;
-  if (!confirm(msg)) return;
-  try {
-    await api("/api/apply", {method: "POST", body: JSON.stringify({run, files, model: $("#model").value})});
-    selected.clear(); $("#check-all").checked = false;
-    await refreshTasks();
-    document.querySelector("#tasks").scrollIntoView({behavior: "smooth"});
-  } catch (err) { alert(err.message); }
-});
-
-let openReports = new Set(), pollTimer = null;
-async function refreshTasks() {
-  clearTimeout(pollTimer);
-  tasks = await api("/api/tasks");
-  const now = Date.now() / 1000;
-  $("#tasks").innerHTML = tasks.length ? tasks.map((t) => {
-    const time = t.status === "running" ? `${Math.round((now - t.started) / 60 * 10) / 10} min so far`
-      : t.seconds ? `${Math.round(t.seconds / 6) / 10} min` : "";
-    const meta = [t.model !== "default" && t.model, time, t.steps && `${t.steps} steps`,
-                  t.cost_usd && `≈ $${t.cost_usd} at API prices`].filter(Boolean).join(" · ");
-    const links = (t.files || []).map((f) =>
-      `<a href="/output/${encodeURIComponent(t.folder)}/${encodeURIComponent(f)}" target="_blank">${esc(f)}</a>`).join("");
-    const report = t.report ? `<details data-id="${t.id}" ${openReports.has(t.id) ? "open" : ""}>
-        <summary>Claude's report</summary><div class="report">${marked.parse(t.report)}</div></details>` : "";
-    return `<div class="card" id="task-${t.id}">
-      <div class="card-head"><strong>${esc(t.company)} — ${esc(t.title)}</strong>
-        <span class="pill ${t.status}">${t.status}</span>
-        ${["done", "failed"].includes(t.status) ? `<button class="ghost" data-forget="${t.id}" title="Remove from this list (files are kept)">✕</button>` : ""}</div>
-      <div class="small">${esc(meta)}${t.folder ? ` · output/${esc(t.folder)}` : ""}</div>
-      ${links ? `<div class="links">${links}</div>` : ""}
-      ${t.denied && t.denied.length ? `<div class="error">Blocked tools: ${esc(t.denied.join(", "))}</div>` : ""}
-      ${t.error ? `<div class="error">${esc(t.error)}</div>` : ""}
-      ${report}</div>`;
-  }).join("") : `<p class="empty">Nothing tailored yet.</p>`;
-  if (run) {   // refresh the "Tailored" column
-    const data = await api(`/api/runs/${encodeURIComponent(run)}`);
-    jobs = data.jobs; renderJobs();
+    await api("/api/tracker", {method: "POST", body: JSON.stringify({folders: [li.dataset.folder], status: btn.dataset.status})});
+    await load();
+  } catch (err) {
+    alert(`Couldn't save: ${err.message}`);
+    li.querySelectorAll("button").forEach((b) => b.disabled = false);
   }
-  if (tasks.some((t) => ["queued", "running"].includes(t.status))) pollTimer = setTimeout(refreshTasks, 5000);
-}
-$("#tasks").addEventListener("toggle", (e) => {
-  const id = e.target.dataset.id;
-  if (id) e.target.open ? openReports.add(id) : openReports.delete(id);
-}, true);
-$("#tasks").addEventListener("click", async (e) => {
-  const id = e.target.dataset.forget;
-  if (!id) return;
-  await api(`/api/tasks/${id}`, {method: "DELETE"});
-  refreshTasks();
 });
 
-// ------------------------------------------------------------------ companies
-const SYSTEM_LABELS = {workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters"};
+// ------------------------------------------------------------------ weekly chart (grouped columns)
+function renderWeekly(weeks) {
+  const svg = $("#weekly");
+  const W = Math.max(320, svg.parentElement.clientWidth), H = 220;
+  const m = {top: 18, right: 12, bottom: 26, left: 32};
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const max = Math.max(1, ...weeks.flatMap((w) => [w.tailored, w.applied]));
+  const step = max <= 5 ? 1 : max <= 10 ? 2 : max <= 25 ? 5 : 10;
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => m.top + ih - (v / top) * ih;
+  const slot = iw / weeks.length;
+  const bw = Math.min(16, (slot - 10) / 2);                 // two columns + 2px gap per week, ≤ 16px each
+  const series = [["tailored", css("--series-1"), "Tailored"], ["applied", css("--series-2"), "Applied"]];
+  // 4px rounded data-end, square at the baseline
+  const col = (x, v, color) => {
+    if (!v) return "";
+    const yt = y(v), h = m.top + ih - yt, r = Math.min(4, h, bw / 2);
+    return `<path fill="${color}" d="M${x},${m.top + ih}V${yt + r}Q${x},${yt} ${x + r},${yt}H${x + bw - r}Q${x + bw},${yt} ${x + bw},${yt + r}V${m.top + ih}Z"/>`;
+  };
+  let out = "";
+  for (let v = 0; v <= top; v += step)
+    out += `<line class="grid-line" x1="${m.left}" x2="${W - m.right}" y1="${y(v)}" y2="${y(v)}"/>
+            <text x="${m.left - 8}" y="${y(v)}" dy="0.35em" text-anchor="end">${v}</text>`;
+  weeks.forEach((w, i) => {
+    const cx = m.left + slot * i + slot / 2;
+    out += `<rect class="band" data-i="${i}" x="${m.left + slot * i}" y="${m.top}" width="${slot}" height="${ih}"/>`;
+    series.forEach(([key, color], k) => { out += col(cx - bw - 1 + k * (bw + 2), w[key], color); });
+    if (i % (weeks.length > 8 && W < 560 ? 2 : 1) === 0 || i === weeks.length - 1)
+      out += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${i === weeks.length - 1 ? "This wk" : esc(fmtDate(w.week))}</text>`;
+  });
+  // label only the current week's values (selective direct labels)
+  const last = weeks[weeks.length - 1], lx = m.left + slot * (weeks.length - 1) + slot / 2;
+  series.forEach(([key], k) => { if (last[key]) out += `<text class="val" x="${lx - bw / 2 - 1 + k * (bw + 2)}" y="${y(last[key]) - 5}" text-anchor="middle">${last[key]}</text>`; });
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.innerHTML = `<desc id="weekly-desc">Jobs tailored and applications sent per week: ${
+    weeks.map((w) => `week of ${w.week}: ${w.tailored} tailored, ${w.applied} applied`).join("; ")}</desc>` + out;
 
-async function loadCompanies() {
-  const list = await api("/api/companies");
-  $("#companies-summary").textContent = `Companies searched (${list.length})`;
-  $("#company-list").innerHTML = list.map((c) =>
-    `<span class="pill" title="${esc(SYSTEM_LABELS[c.system])}: ${esc(c.detail)}">${esc(c.name)}<span class="sys">${esc(SYSTEM_LABELS[c.system])}</span></span>`).join("");
+  const tip = $("#tooltip");
+  svg.querySelectorAll(".band").forEach((b) => {
+    b.addEventListener("mousemove", (e) => {
+      const w = weeks[b.dataset.i];
+      tip.innerHTML = `<strong>Week of ${esc(fmtDate(w.week))}</strong><br>` +
+        series.map(([key, color, label]) => `<i style="background:${color}"></i>${label}: ${w[key]}`).join("<br>");
+      tip.style.display = "block";
+      tip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - 160)}px`;
+      tip.style.top = `${e.clientY + 12}px`;
+    });
+    b.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  });
+  $("#weekly-table").innerHTML = weeks.slice().reverse().map((w) =>
+    `<tr><td>${esc(fmtDate(w.week, {day: "numeric", month: "short", year: "numeric"}))}</td><td class="num">${w.tailored}</td><td class="num">${w.applied}</td></tr>`).join("");
 }
 
-function showCompanyResult(kind, html) {
-  const box = $("#company-result");
-  box.className = `company-result ${kind}`;
-  box.innerHTML = html;
-  box.hidden = false;
+// ------------------------------------------------------------------ latest search
+function renderLatest(run) {
+  if (!run) {
+    $("#latest").innerHTML = `<p class="empty">No searches yet. <a href="/search.html">Run your first search</a>.</p>`;
+    return;
+  }
+  const order = [["Apply", "Apply"], ["Long shot", "Long"], ["Skip", "Skip"]];
+  const open = `/search.html?run=${encodeURIComponent(run.name)}`;
+  $("#latest").innerHTML = `<div class="small">${esc(run.label)}</div>
+    <div class="verdicts">${order.filter(([v]) => run.verdicts[v]).map(([v, c]) => `<span class="pill ${c}">${run.verdicts[v]} ${esc(v)}</span>`).join("")}
+      ${run.new ? `<span class="pill">${run.new} new</span>` : ""}</div>
+    <div class="small" style="margin-top:10px">Best Apply matches not tailored yet</div>
+    <ul class="items">${run.top.map((j) => `<li><span class="score">${esc(j.score)}</span>
+      <div class="what"><strong>${esc(j.company)}</strong>${j.new ? '<span class="new">NEW</span>' : ""}
+        <div class="role"><a href="${esc(j.url)}" target="_blank" rel="noopener" title="${esc(j.title)}">${esc(j.title)}</a></div></div></li>`).join("")
+      || `<li class="empty">All Apply matches from this search have been tailored.</li>`}</ul>
+    <a class="small" href="${open}">Open this search to tailor →</a>`;
 }
 
-let pendingSource = null;
-async function checkCompany() {
-  const query = $("#company-input").value.trim();
-  if (!query) return;
-  pendingSource = null;
-  $("#company-check").disabled = true;
-  showCompanyResult("", "Checking…");
-  try {
-    const r = await api("/api/companies/check", {method: "POST", body: JSON.stringify({query})});
-    if (r.status === "exists") {
-      showCompanyResult("ok", `✓ <strong>${esc(r.company.name)}</strong> is already included
-        (${esc(SYSTEM_LABELS[r.company.system])} · ${esc(r.company.detail)}). Nothing to add.`);
-    } else if (r.status === "found") {
-      pendingSource = r.source;
-      const jobs = r.jobs != null ? ` with ${esc(r.jobs)} open jobs worldwide` : "";
-      const nameField = r.source.system === "workday"
-        ? `<label class="small">Show as <input type="text" id="company-name" value="${esc(r.source.name)}" style="width:180px"></label>` : "";
-      showCompanyResult(r.warning ? "warn" : "",
-        `<span>Found <strong>${esc(r.source.name)}</strong> on ${esc(SYSTEM_LABELS[r.source.system])}${jobs}.</span>
-         ${r.warning ? `<span>${esc(r.warning)}</span>` : ""}
-         ${nameField}<button id="company-add">Add</button>`);
-    } else if (r.status === "not_found") {
-      const sim = r.similar.length ? ` Did you mean: ${r.similar.map(esc).join(", ")}?` : "";
-      showCompanyResult("warn", `${esc(r.message)}${sim}`);
-    } else {
-      showCompanyResult("bad", esc(r.message));
-    }
-  } catch (err) { showCompanyResult("bad", esc(err.message)); }
-  finally { $("#company-check").disabled = false; }
+// ------------------------------------------------------------------ banners (tailoring status)
+function renderBanners(t) {
+  let html = "";
+  if (t.running || t.queued)
+    html += `<div class="banner run">Tailoring: ${t.running} running${t.queued ? `, ${t.queued} queued` : ""}. <a href="/search.html">See progress →</a></div>`;
+  if (t.failed_recent.length)
+    html += `<div class="banner bad">${plural(t.failed_recent.length, "tailoring run")} failed this week: ${
+      t.failed_recent.map((f) => esc(f.company)).join(", ")}. <a href="/search.html">Details →</a></div>`;
+  $("#banners").innerHTML = html;
 }
 
-$("#company-check").addEventListener("click", checkCompany);
-$("#company-input").addEventListener("keydown", (e) => { if (e.key === "Enter") checkCompany(); });
-$("#company-result").addEventListener("click", async (e) => {
-  if (e.target.id !== "company-add" || !pendingSource) return;
-  e.target.disabled = true;
-  const nameInput = $("#company-name");
-  if (nameInput && nameInput.value.trim()) pendingSource.name = nameInput.value.trim();
-  try {
-    const r = await api("/api/companies", {method: "POST", body: JSON.stringify(pendingSource)});
-    showCompanyResult(r.ok ? "ok" : "bad", esc(r.message));
-    if (r.ok) { pendingSource = null; $("#company-input").value = ""; await loadCompanies(); }
-  } catch (err) { showCompanyResult("bad", esc(err.message)); e.target.disabled = false; }
-});
+// ------------------------------------------------------------------ load
+async function load() {
+  data = await api("/api/dashboard");
+  $("#today").textContent = fmtDate(data.today, {weekday: "long", day: "numeric", month: "long", year: "numeric"}) +
+    ` · ${plural(data.summary.analysed, "job")} analysed, ${plural(data.runs_total, "search")} saved`;
+  renderBanners(data.tailoring);
+  renderKpis(data.summary);
+  renderLists();
+  renderWeekly(data.weekly);
+  renderLatest(data.latest_run);
+  const t = data.tailoring;
+  clearTimeout(load.timer);
+  if (t.running || t.queued) load.timer = setTimeout(() => load().catch(() => {}), 10000);
+}
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && renderWeekly(data.weekly), 150); });
 
-loadCompanies().catch(() => {});
-init().catch((err) => { $("#cv-info").textContent = `Could not load: ${err.message}`; });
+load().catch((err) => { $("#today").textContent = `Could not load: ${err.message}`; });
 </script>
 </body>
 </html>

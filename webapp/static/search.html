@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Hunt</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f5; --chip: #e7ebe9; --line: #d9dfdc;
+    --fg: #212d2d; --accent: #363f3a; --muted: #66726b;
+    --apply: #2f6b4f; --long: #8a6d1f; --skip: #8c3b3b; --run: #2d5b8a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 96px; }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
+  nav.pages { display: flex; gap: 6px; margin-bottom: 18px; }
+  nav.pages a { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); }
+  nav.pages a.active { background: var(--accent); color: #fff; }
+  nav.pages a:not(.active):hover { background: var(--chip); }
+  h2 { font-size: 18px; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 4px 0 24px; }
+  section { border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+  label { cursor: pointer; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .col { flex: 1 1 260px; }
+  .field-title { font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: .04em; margin-bottom: 6px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  textarea, input[type=text], select { font: inherit; color: inherit; border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 8px; background: var(--bg); }
+  textarea { width: 100%; min-height: 120px; resize: vertical; }
+  button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+           border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+  button.ghost { background: var(--bg); color: var(--accent); border-color: var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  .log { background: var(--surface); border-radius: 6px; padding: 8px 10px; font: 12px/1.4 ui-monospace, monospace;
+         max-height: 140px; overflow: auto; white-space: pre-wrap; margin-top: 12px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .toolbar .grow { flex: 1; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  tr:hover td { background: var(--surface); }
+  a { color: var(--accent); text-decoration-color: var(--line); text-underline-offset: 3px; }
+  a:hover { text-decoration-color: currentColor; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+          background: var(--chip); color: var(--accent); white-space: nowrap; }
+  .pill.Apply, .pill.done { background: #e2efe8; color: var(--apply); }
+  .pill.Long { background: #f4ecd6; color: var(--long); }
+  .pill.Skip, .pill.failed { background: #f3e1e1; color: var(--skip); }
+  .pill.running, .pill.queued { background: #e1eaf4; color: var(--run); }
+  .small { font-size: 12px; color: var(--muted); }
+  .new { font-size: 11px; font-weight: 700; color: var(--run); margin-left: 4px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
+         padding: 10px 16px; display: none; }
+  .bar.show { display: block; }
+  .bar .inner { max-width: 1400px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .cards { display: grid; gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .card-head strong { flex: 1 1 300px; }
+  .links { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .report { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 14px; }
+  .report table { font-size: 13px; }
+  .error { color: var(--skip); white-space: pre-wrap; font-size: 13px; margin-top: 6px; }
+  .empty { color: var(--muted); }
+  details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin-top: 8px; }
+  .dropdown { position: relative; }
+  .dropdown summary { list-style: none; margin: 0; min-width: 200px; border: 1px solid var(--line); border-radius: 6px;
+                      padding: 6px 30px 6px 8px; color: var(--fg); font-size: 15px; background: var(--bg); position: relative; }
+  .dropdown summary::-webkit-details-marker { display: none; }
+  .dropdown summary::after { content: "▾"; position: absolute; right: 10px; color: var(--muted); }
+  .dropdown .menu { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 100%; background: var(--bg);
+                    border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+  .dropdown .menu label { display: block; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+  .dropdown .menu label:hover { background: var(--surface); }
+  select { padding: 6px 8px; }
+  .companies { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
+  .companies > summary { font-weight: 600; color: var(--fg); }
+  .add-row { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
+  .add-row input { flex: 1 1 320px; }
+  .company-result { background: var(--surface); border-radius: 6px; padding: 10px 12px; font-size: 14px;
+                    display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .company-result.ok { background: #e2efe8; }
+  .company-result.warn { background: #f4ecd6; }
+  .company-result.bad { background: #f3e1e1; }
+  .company-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .company-list .pill { font-weight: 500; }
+  .company-list .sys { color: var(--muted); font-weight: 400; margin-left: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <nav class="pages"><a href="/">Dashboard</a><a href="/search.html" class="active">Search</a><a href="/tracker.html">Tracker</a></nav>
+  <h1>Job Hunt</h1>
+  <p class="sub" id="cv-info">Loading…</p>
+
+  <section>
+    <h2>1. Search</h2>
+    <div class="row">
+      <div class="col">
+        <div class="row" style="gap:12px">
+          <div>
+            <div class="field-title">Countries</div>
+            <details class="dropdown" id="countries-dd">
+              <summary id="countries-label">Spain</summary>
+              <div class="menu" id="countries"></div>
+            </details>
+          </div>
+          <div>
+            <div class="field-title">Posted within</div>
+            <select id="max-age">
+              <option value="1">24 hours</option>
+              <option value="3">3 days</option>
+              <option value="7" selected>1 week</option>
+              <option value="30">1 month</option>
+            </select>
+          </div>
+        </div>
+        <div class="checks" style="margin-top:14px">
+          <label><input type="checkbox" id="include-skips"> Include Skip verdicts</label>
+        </div>
+      </div>
+      <div class="col">
+        <div class="field-title">Keywords (one per line)</div>
+        <textarea id="terms"></textarea>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <button id="search-btn">Search jobs</button>
+      <span class="small">Takes about 2 minutes.</span>
+      <span class="grow"></span>
+      <label class="small">or open an earlier search
+        <select id="runs"></select></label>
+    </div>
+    <div class="log" id="search-log" hidden></div>
+
+    <details class="companies" id="companies-panel">
+      <summary id="companies-summary">Companies searched</summary>
+      <div class="add-row">
+        <input type="text" id="company-input" placeholder="Company name, or paste a link to one of its jobs">
+        <button id="company-check">Check</button>
+      </div>
+      <div id="company-result" class="company-result" hidden></div>
+      <div id="company-list" class="company-list"></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>2. Shortlist <span class="small" id="run-name"></span></h2>
+    <div class="toolbar">
+      <input type="text" id="filter" placeholder="Filter by company, title or city…" style="min-width:260px">
+      <label><input type="checkbox" class="vfilter" value="Apply" checked> Apply</label>
+      <label><input type="checkbox" class="vfilter" value="Long shot" checked> Long shot</label>
+      <label><input type="checkbox" class="vfilter" value="Skip" checked> Skip</label>
+      <span class="grow"></span>
+      <span class="small" id="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th><input type="checkbox" id="check-all" title="Select all shown"></th>
+          <th>Verdict</th><th>Score</th><th>Company</th><th>Title</th><th>Location</th>
+          <th>Posted</th><th>Flags / gaps</th><th>Tailored</th>
+        </tr></thead>
+        <tbody id="jobs"><tr><td colspan="9" class="empty">Run a search or open an earlier one.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Tailored applications</h2>
+    <div class="cards" id="tasks"><p class="empty">Nothing tailored yet.</p></div>
+  </section>
+</main>
+
+<div class="bar" id="bar"><div class="inner">
+  <strong id="sel-count"></strong>
+  <label>Model <select id="model">
+    <option value="">Default (Claude Code's model)</option>
+    <option value="sonnet">Sonnet (lighter on limits)</option>
+  </select></label>
+  <button id="apply-btn">Tailor CV + cover letter</button>
+  <button class="ghost" id="clear-btn">Clear selection</button>
+  <span class="small" id="limit-note"></span>
+</div></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const api = async (url, opts = {}) => {
+  const r = await fetch(url, {headers: {"Content-Type": "application/json"}, ...opts});
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+};
+const remember = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const recall = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+
+let run = null, jobs = [], selected = new Set(), tasks = [], settings = null;
+
+async function init() {
+  settings = await api("/api/settings");
+  $("#cv-info").innerHTML = `Tailoring uses <code>${esc(settings.cv.path)}</code> (last edited ${esc(settings.cv.modified)}). ` +
+    `Up to ${settings.max_parallel} applications run at once.`;
+  const saved = recall("search", {});
+  const defaultCountry = settings.countries.includes("Spain") ? "Spain" : settings.countries[0];
+  $("#countries").innerHTML = settings.countries.map((c) =>
+    `<label><input type="checkbox" value="${esc(c)}" ${c === defaultCountry ? "checked" : ""}> ${esc(c)}</label>`).join("");
+  updateCountriesLabel();
+  $("#terms").value = (saved.terms || settings.search_terms).join("\n");
+  if (saved.max_age_days) $("#max-age").value = String(saved.max_age_days);
+  $("#include-skips").checked = !!saved.include_skips;
+  $("#limit-note").textContent = "Each run takes ~3 min and counts against your Claude usage limits.";
+  await loadRuns();
+  await refreshTasks();
+}
+
+async function loadRuns(select) {
+  const runs = await api("/api/runs");
+  $("#runs").innerHTML = `<option value="">—</option>` +
+    runs.map((r) => `<option value="${esc(r.name)}">${esc(r.label)}</option>`).join("");
+  const names = runs.map((r) => r.name);
+  const pick = select || new URLSearchParams(location.search).get("run") || recall("run", names[0]);
+  if (pick && names.includes(pick)) { $("#runs").value = pick; await openRun(pick); }
+}
+
+async function openRun(name) {
+  if (!name) return;
+  const data = await api(`/api/runs/${encodeURIComponent(name)}`);
+  run = name; jobs = data.jobs; selected.clear();
+  remember("run", name);
+  $("#run-name").textContent = `· ${data.label}`;
+  renderJobs();
+}
+
+function visibleJobs() {
+  const q = $("#filter").value.trim().toLowerCase();
+  const verdicts = [...document.querySelectorAll(".vfilter:checked")].map((c) => c.value);
+  return jobs.filter((j) => verdicts.includes(j.verdict) &&
+    (!q || `${j.company} ${j.title} ${j.location}`.toLowerCase().includes(q)));
+}
+
+function renderJobs() {
+  const shown = visibleJobs();
+  $("#count").textContent = `${shown.length} of ${jobs.length} postings`;
+  const byTask = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  $("#jobs").innerHTML = shown.length ? shown.map((j) => {
+    const t = j.task && byTask[j.task];
+    const status = t ? `<a href="#task-${t.id}" class="pill ${t.status}">${t.status === "done" ? "✓ done" : t.status}</a>` : "";
+    const flags = [j.flags, j.gaps && `gaps: ${j.gaps}`].filter(Boolean).join("; ");
+    return `<tr>
+      <td><input type="checkbox" data-file="${esc(j.file)}" ${selected.has(j.file) ? "checked" : ""}></td>
+      <td><span class="pill ${esc(j.verdict.split(" ")[0])}">${esc(j.verdict)}</span></td>
+      <td class="num">${esc(j.score)}</td>
+      <td>${esc(j.company)}</td>
+      <td><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>${j.new ? '<span class="new">NEW</span>' : ""}
+          <div class="small"><a href="/api/runs/${encodeURIComponent(run)}/jobs/${encodeURIComponent(j.file)}" target="_blank">posting text</a></div></td>
+      <td class="small">${esc(j.location.split("; ").filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 3).join("; "))}</td>
+      <td class="small" style="white-space:nowrap">${esc(j.posted)}</td>
+      <td class="small">${esc(flags)}</td>
+      <td>${status}</td></tr>`;
+  }).join("") : `<tr><td colspan="9" class="empty">No postings match.</td></tr>`;
+  updateBar();
+}
+
+function updateBar() {
+  $("#sel-count").textContent = `${selected.size} selected`;
+  $("#bar").classList.toggle("show", selected.size > 0);
+}
+
+$("#jobs").addEventListener("change", (e) => {
+  const f = e.target.dataset.file;
+  if (!f) return;
+  e.target.checked ? selected.add(f) : selected.delete(f);
+  updateBar();
+});
+$("#check-all").addEventListener("change", (e) => {
+  visibleJobs().forEach((j) => e.target.checked ? selected.add(j.file) : selected.delete(j.file));
+  renderJobs();
+});
+$("#filter").addEventListener("input", renderJobs);
+document.querySelectorAll(".vfilter").forEach((c) => c.addEventListener("change", renderJobs));
+$("#runs").addEventListener("change", (e) => openRun(e.target.value));
+$("#clear-btn").addEventListener("click", () => { selected.clear(); $("#check-all").checked = false; renderJobs(); });
+
+const chosenCountries = () => [...document.querySelectorAll("#countries input:checked")].map((c) => c.value);
+function updateCountriesLabel() {
+  const c = chosenCountries();
+  $("#countries-label").textContent = c.length ? c.join(", ") : "Choose countries…";
+}
+$("#countries").addEventListener("change", updateCountriesLabel);
+document.addEventListener("click", (e) => {     // close the dropdown when clicking elsewhere
+  if (!$("#countries-dd").contains(e.target)) $("#countries-dd").open = false;
+});
+
+$("#search-btn").addEventListener("click", async () => {
+  const body = {
+    countries: chosenCountries(),
+    terms: $("#terms").value.split("\n").map((t) => t.trim()).filter(Boolean),
+    max_age_days: Number($("#max-age").value), include_skips: $("#include-skips").checked,
+  };
+  if (!body.countries.length) { alert("Choose at least one country."); return; }
+  remember("search", body);
+  const log = $("#search-log");
+  try {
+    $("#search-btn").disabled = true;
+    log.hidden = false; log.textContent = "Starting search…";
+    run = null; jobs = []; selected.clear(); updateBar();       // don't leave an old list on screen
+    $("#runs").value = "";
+    $("#run-name").textContent = "· searching…";
+    $("#count").textContent = "";
+    $("#jobs").innerHTML = `<tr><td colspan="9" class="empty">Searching… results will appear here when the search finishes.</td></tr>`;
+    let s = await api("/api/search", {method: "POST", body: JSON.stringify(body)});
+    while (s.status === "running") {
+      await new Promise((r) => setTimeout(r, 2000));
+      s = await api(`/api/search/${s.id}`);
+      log.textContent = s.log.join("\n") || "Searching…";
+      log.scrollTop = log.scrollHeight;
+    }
+    if (s.status === "done") { log.textContent += `\n\nDone in ${s.seconds}s.`; await loadRuns(s.run); }
+    else log.textContent += "\n\nSearch failed — see the log above.";
+  } catch (err) { log.hidden = false; log.textContent = `Error: ${err.message}`; }
+  finally { $("#search-btn").disabled = false; }
+});
+
+$("#apply-btn").addEventListener("click", async () => {
+  const files = [...selected];
+  const already = jobs.filter((j) => files.includes(j.file) && j.task).length;
+  const msg = `Tailor ${files.length} application(s)?` +
+    (already ? `\n${already} already tailored — running again replaces today's folder for that job.` : "") +
+    `\nEach takes ~3 min and counts against your Claude usage limits.`;
+  if (!confirm(msg)) return;
+  try {
+    await api("/api/apply", {method: "POST", body: JSON.stringify({run, files, model: $("#model").value})});
+    selected.clear(); $("#check-all").checked = false;
+    await refreshTasks();
+    document.querySelector("#tasks").scrollIntoView({behavior: "smooth"});
+  } catch (err) { alert(err.message); }
+});
+
+let openReports = new Set(), pollTimer = null;
+async function refreshTasks() {
+  clearTimeout(pollTimer);
+  tasks = await api("/api/tasks");
+  const now = Date.now() / 1000;
+  $("#tasks").innerHTML = tasks.length ? tasks.map((t) => {
+    const time = t.status === "running" ? `${Math.round((now - t.started) / 60 * 10) / 10} min so far`
+      : t.seconds ? `${Math.round(t.seconds / 6) / 10} min` : "";
+    const meta = [t.model !== "default" && t.model, time, t.steps && `${t.steps} steps`,
+                  t.cost_usd && `≈ $${t.cost_usd} at API prices`].filter(Boolean).join(" · ");
+    const links = (t.files || []).map((f) =>
+      `<a href="/output/${encodeURIComponent(t.folder)}/${encodeURIComponent(f)}" target="_blank">${esc(f)}</a>`).join("");
+    const report = t.report ? `<details data-id="${t.id}" ${openReports.has(t.id) ? "open" : ""}>
+        <summary>Claude's report</summary><div class="report">${marked.parse(t.report)}</div></details>` : "";
+    return `<div class="card" id="task-${t.id}">
+      <div class="card-head"><strong>${esc(t.company)} — ${esc(t.title)}</strong>
+        <span class="pill ${t.status}">${t.status}</span>
+        ${["done", "failed"].includes(t.status) ? `<button class="ghost" data-forget="${t.id}" title="Remove from this list (files are kept)">✕</button>` : ""}</div>
+      <div class="small">${esc(meta)}${t.folder ? ` · output/${esc(t.folder)}` : ""}</div>
+      ${links ? `<div class="links">${links}</div>` : ""}
+      ${t.denied && t.denied.length ? `<div class="error">Blocked tools: ${esc(t.denied.join(", "))}</div>` : ""}
+      ${t.error ? `<div class="error">${esc(t.error)}</div>` : ""}
+      ${report}</div>`;
+  }).join("") : `<p class="empty">Nothing tailored yet.</p>`;
+  if (run) {   // refresh the "Tailored" column
+    const data = await api(`/api/runs/${encodeURIComponent(run)}`);
+    jobs = data.jobs; renderJobs();
+  }
+  if (tasks.some((t) => ["queued", "running"].includes(t.status))) pollTimer = setTimeout(refreshTasks, 5000);
+}
+$("#tasks").addEventListener("toggle", (e) => {
+  const id = e.target.dataset.id;
+  if (id) e.target.open ? openReports.add(id) : openReports.delete(id);
+}, true);
+$("#tasks").addEventListener("click", async (e) => {
+  const id = e.target.dataset.forget;
+  if (!id) return;
+  await api(`/api/tasks/${id}`, {method: "DELETE"});
+  refreshTasks();
+});
+
+// ------------------------------------------------------------------ companies
+const SYSTEM_LABELS = {workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters"};
+
+async function loadCompanies() {
+  const list = await api("/api/companies");
+  $("#companies-summary").textContent = `Companies searched (${list.length})`;
+  $("#company-list").innerHTML = list.map((c) =>
+    `<span class="pill" title="${esc(SYSTEM_LABELS[c.system])}: ${esc(c.detail)}">${esc(c.name)}<span class="sys">${esc(SYSTEM_LABELS[c.system])}</span></span>`).join("");
+}
+
+function showCompanyResult(kind, html) {
+  const box = $("#company-result");
+  box.className = `company-result ${kind}`;
+  box.innerHTML = html;
+  box.hidden = false;
+}
+
+let pendingSource = null;
+async function checkCompany() {
+  const query = $("#company-input").value.trim();
+  if (!query) return;
+  pendingSource = null;
+  $("#company-check").disabled = true;
+  showCompanyResult("", "Checking…");
+  try {
+    const r = await api("/api/companies/check", {method: "POST", body: JSON.stringify({query})});
+    if (r.status === "exists") {
+      showCompanyResult("ok", `✓ <strong>${esc(r.company.name)}</strong> is already included
+        (${esc(SYSTEM_LABELS[r.company.system])} · ${esc(r.company.detail)}). Nothing to add.`);
+    } else if (r.status === "found") {
+      pendingSource = r.source;
+      const jobs = r.jobs != null ? ` with ${esc(r.jobs)} open jobs worldwide` : "";
+      const nameField = r.source.system === "workday"
+        ? `<label class="small">Show as <input type="text" id="company-name" value="${esc(r.source.name)}" style="width:180px"></label>` : "";
+      showCompanyResult(r.warning ? "warn" : "",
+        `<span>Found <strong>${esc(r.source.name)}</strong> on ${esc(SYSTEM_LABELS[r.source.system])}${jobs}.</span>
+         ${r.warning ? `<span>${esc(r.warning)}</span>` : ""}
+         ${nameField}<button id="company-add">Add</button>`);
+    } else if (r.status === "not_found") {
+      const sim = r.similar.length ? ` Did you mean: ${r.similar.map(esc).join(", ")}?` : "";
+      showCompanyResult("warn", `${esc(r.message)}${sim}`);
+    } else {
+      showCompanyResult("bad", esc(r.message));
+    }
+  } catch (err) { showCompanyResult("bad", esc(err.message)); }
+  finally { $("#company-check").disabled = false; }
+}
+
+$("#company-check").addEventListener("click", checkCompany);
+$("#company-input").addEventListener("keydown", (e) => { if (e.key === "Enter") checkCompany(); });
+$("#company-result").addEventListener("click", async (e) => {
+  if (e.target.id !== "company-add" || !pendingSource) return;
+  e.target.disabled = true;
+  const nameInput = $("#company-name");
+  if (nameInput && nameInput.value.trim()) pendingSource.name = nameInput.value.trim();
+  try {
+    const r = await api("/api/companies", {method: "POST", body: JSON.stringify(pendingSource)});
+    showCompanyResult(r.ok ? "ok" : "bad", esc(r.message));
+    if (r.ok) { pendingSource = null; $("#company-input").value = ""; await loadCompanies(); }
+  } catch (err) { showCompanyResult("bad", esc(err.message)); e.target.disabled = false; }
+});
+
+loadCompanies().catch(() => {});
+init().catch((err) => { $("#cv-info").textContent = `Could not load: ${err.message}`; });
+</script>
+</body>
+</html>

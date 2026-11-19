@@ -16,7 +16,7 @@ import shutil
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -223,6 +223,58 @@ def update_tracker(u: TrackerUpdate):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"updated": n}
+
+
+# ------------------------------------------------------------------ dashboard (home page)
+
+FOLLOW_UP_DAYS = 14         # applied this long ago with no reply: show under "Follow up"
+
+
+@app.get("/api/dashboard")
+def dashboard():
+    """Everything the home page shows, in one call."""
+    rows = tracker.rows(OUTPUT, TRACKER_FILE) if OUTPUT.exists() else []
+    today = date.today()
+
+    def days_since(day: str) -> int | None:
+        try:
+            return (today - date.fromisoformat(day)).days
+        except ValueError:
+            return None
+
+    to_send = [r for r in rows if r["status"] == "tailored"]                       # newest first
+    follow_up = [{**r, "days": days_since(r["applied_on"])} for r in rows if r["status"] == "applied"]
+    follow_up = sorted((r for r in follow_up if (r["days"] or 0) >= FOLLOW_UP_DAYS), key=lambda r: -r["days"])
+    active = [r for r in rows if r["status"] in ("interview", "offer")]
+
+    latest = None
+    runs = list_runs()
+    if runs:
+        jobs = read_shortlist(runs[0]["name"])
+        verdicts = {}
+        for j in jobs:
+            verdicts[j["verdict"]] = verdicts.get(j["verdict"], 0) + 1
+        top = sorted((j for j in jobs if j["verdict"] == "Apply" and not j["task"]),
+                     key=lambda j: -int(j["score"] or 0))[:5]
+        latest = {**runs[0], "total": len(jobs), "new": sum(1 for j in jobs if j["new"]), "verdicts": verdicts,
+                  "top": [{k: j[k] for k in ("company", "title", "score", "new", "url", "file")} for j in top]}
+
+    week_ago = time.time() - 7 * 86400
+    return {
+        "today": today.isoformat(),
+        "summary": tracker.summary(rows),
+        "weekly": tracker.weekly(rows),
+        "to_send": to_send[:8], "to_send_total": len(to_send),
+        "follow_up": follow_up[:8], "follow_up_total": len(follow_up), "follow_up_days": FOLLOW_UP_DAYS,
+        "active": active,
+        "latest_run": latest, "runs_total": len(runs),
+        "tailoring": {
+            "running": sum(t["status"] == "running" for t in tasks.values()),
+            "queued": sum(t["status"] == "queued" for t in tasks.values()),
+            "failed_recent": [{"company": t["company"], "title": t["title"], "error": (t.get("error") or "")[:200]}
+                              for t in tasks.values() if t["status"] == "failed" and t["created"] >= week_ago],
+        },
+    }
 
 
 # ------------------------------------------------------------------ search (jobscout)

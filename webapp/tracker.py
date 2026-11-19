@@ -6,7 +6,7 @@ Folders without an entry use a default: "tailored" if a CV or letter exists, oth
 """
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 # status → (label, path through the funnel after the first step)
@@ -140,3 +140,26 @@ def summary(all_rows: list[dict]) -> dict:
         "interviews": len(interviews),
         "offers": len(offers),
     }
+
+
+def weekly(all_rows: list[dict], weeks: int = 12, today: date | None = None) -> list[dict]:
+    """Jobs tailored (by analysis date) and applications sent (by applied date) per week,
+    for the last `weeks` weeks. Weeks start on Monday; the last one is the current week."""
+    today = today or date.today()
+    start = today - timedelta(days=today.weekday(), weeks=weeks - 1)
+    buckets = [{"week": (start + timedelta(weeks=i)).isoformat(), "tailored": 0, "applied": 0} for i in range(weeks)]
+
+    def add(day: str, key: str):
+        try:
+            i = (date.fromisoformat(day) - start).days // 7
+        except ValueError:
+            return
+        if 0 <= i < weeks:
+            buckets[i][key] += 1
+
+    for r in all_rows:
+        if r["tailored"]:
+            add(r["date"], "tailored")
+        if r["status"] not in NOT_APPLIED:
+            add(r["applied_on"], "applied")
+    return buckets

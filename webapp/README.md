@@ -8,6 +8,9 @@ cd webapp
 ./start.sh            # then open http://localhost:8000 (Ctrl+C stops it)
 ```
 
+The home page is the **Dashboard**: what's ready to send, what needs a follow-up, weekly activity
+and the best matches from the latest search. The steps below happen on the **Search** page.
+
 1. **Search:** choose countries, how recent, and keywords, then *Search jobs*.
    Each search is saved under `jobscout/runs/<date_time>/` and can be reopened from the dropdown.
 2. **Shortlist:** filter, read the posting text, tick the jobs you want.
@@ -22,7 +25,7 @@ Tailoring uses your Claude Code login and counts against its usage limits. The
 ## How it works
 
 ```
-Browser (static/index.html)
+Browser (static/index.html, search.html, tracker.html)
    │  fetch() calls to /api/...
    ▼
 webapp/app.py  (FastAPI server on localhost:8000)
@@ -44,7 +47,8 @@ a terminal and shows their results, so each part can be tested on its own.
 | `webapp/tracker.py` | Tracker rows (one per `output/` folder), statuses, the funnel and the summary numbers |
 | `webapp/static/tracker.html` | The Tracker page: stat tiles, Sankey diagram (d3-sankey), applications table |
 | `webapp/tracker.json` | Your statuses, applied dates and notes, keyed by output folder. **Back this up**: it's the only place they're stored |
-| `webapp/static/index.html` | The whole page: HTML, CSS and JavaScript in one file |
+| `webapp/static/index.html` | The Dashboard (home page): KPI tiles, to-do lists, weekly chart, latest search |
+| `webapp/static/search.html` | The Search page: search, shortlist and tailoring (HTML, CSS and JavaScript in one file) |
 | `webapp/tasks.json` | History of tailoring runs (created on first use; safe to delete) |
 | `webapp/start.sh` | Creates `.venv` if needed and starts the server |
 | `jobscout/jobscout.py` | Searches career sites, filters, scores, writes `runs/<run>/` |
@@ -61,6 +65,7 @@ a terminal and shows their results, so each part can be tested on its own.
 | `GET /api/companies` | Companies jobscout searches |
 | `POST /api/companies/check` | Is a company (name or link) already included? If not, find and test its job board |
 | `POST /api/companies` | Add a checked company to `config.yaml` |
+| `GET /api/dashboard` | Everything the Dashboard shows, in one call |
 | `GET /api/tracker` | Tracker rows, summary numbers, Sankey nodes/links, status list |
 | `POST /api/tracker` | Set status, applied date or notes for one or more output folders |
 | `GET /api/runs/<run>/jobs/<file>` | Full text of one posting |
@@ -89,6 +94,15 @@ a terminal and shows their results, so each part can be tested on its own.
 
 ---
 
+### The Dashboard (`/`)
+
+Built from `GET /api/dashboard`, which reuses the tracker rows, the newest search run and the
+tailoring history. *Ready to send* lists tailored jobs still at *Not applied yet*; *Follow up* lists
+applications at *Applied, waiting* for `FOLLOW_UP_DAYS` (14) days or more. Their buttons set the
+status the same way the Tracker does (*Mark applied* dates it today). *Latest search* links to
+`/search.html?run=<run>`, which opens that run. The weekly chart counts tailored jobs by the output
+folder's date and applications by their applied-on date.
+
 ### The Tracker page (`/tracker.html`)
 
 Every folder in `output/` is one row: company, role and location come from the first line of its
@@ -111,15 +125,16 @@ Choosing a status beyond *Not applied yet* without an applied date sets the date
 | Change default keywords | `config.yaml` → `search_terms:` (the page remembers your last edits in the browser) |
 | Change scoring or verdicts | `config.yaml` → `keywords`, `gaps`, `title_points`, `thresholds` |
 | Fix "rate limited" failures | `config.yaml` → raise `workday_pace_seconds` (e.g. 1.5). Lower it for faster searches. A Workday group that still refuses is skipped for the rest of that search |
-| Change the default country | `index.html`, search for `defaultCountry` |
-| Change the "Posted within" choices | `index.html`, the `<select id="max-age">` options (value = days) |
+| Change the default country | `search.html`, search for `defaultCountry` |
+| Change the "Posted within" choices | `search.html`, the `<select id="max-age">` options (value = days) |
 | Run more or fewer tailoring jobs at once | `app.py` → `MAX_PARALLEL` |
 | Change the stuck-run time limit | `app.py` → `RUN_TIMEOUT` (seconds) |
 | Change how tailoring works | Edit the skill: `~/.claude/skills/apply/SKILL.md`. The app needs no change |
+| Change when an application shows under *Follow up* | `app.py` → `FOLLOW_UP_DAYS` |
 | Use another port | `start.sh` → `--port 8000` |
 
 After editing `app.py` or `config.yaml`, stop the server (Ctrl+C) and start it again. After
-editing `index.html`, just reload the page.
+editing a page in `static/`, just reload it.
 
 ## When something goes wrong
 

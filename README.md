@@ -32,6 +32,9 @@ webapp/app.py  (FastAPI, localhost only)
    └─ Track   → reads output/, saves statuses           → webapp/tracker.json
 ```
 
+A **Dashboard** home page pulls it together: applications ready to send, ones to follow up,
+weekly activity and the best new matches.
+
 ## Design choices
 
 - **Your documents never leave your machine** except to Claude for tailoring. `base/`, `output/`,
@@ -65,7 +68,7 @@ Tailoring runs Claude Code on your own account and counts against its usage limi
 | Path | What it is |
 |---|---|
 | `jobscout/` | Job search and scoring (`jobscout.py`, `config.yaml`); also runs on its own from the command line |
-| `webapp/` | Local web app: `app.py` (API), `companies.py`, `tracker.py`, `static/` (pages) |
+| `webapp/` | Local web app: `app.py` (API), `companies.py`, `tracker.py`, `static/` (Dashboard, Search, Tracker pages) |
 | `skills/apply/` | Generic version of the Claude Code skill that tailors the documents |
 | `base/` | Your master CV and cover letter (not committed) |
 
