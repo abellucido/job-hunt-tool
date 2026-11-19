@@ -1,0 +1,221 @@
+# jobscout configuration — edit freely, then run:  python3 jobscout.py
+#
+# Scoring keywords below were extracted from base/cv_master.tex. Only add
+# skills you can actually back up on the CV (same rule as /apply).
+
+# ---------------------------------------------------------------- where
+# A job is kept if any of its location strings contains one of these words
+# (case-insensitive). Country names also drive Workday's country filter.
+locations:
+  Switzerland: [Switzerland, Schweiz, Suisse, Svizzera, Basel, Kaiseraugst, Rotkreuz, Zurich, Zürich, Bern, Geneva, Genève, Lausanne, Baden, Visp, Zug, Schlieren, Stein]
+  Spain:       [Spain, España, Barcelona, Sant Cugat, Madrid, Valencia, Lleida, Málaga, Malaga, Sevilla]
+  Netherlands: [Netherlands, Amsterdam, Rotterdam, Eindhoven, Leiden, Utrecht, The Hague, Den Haag, Breda, Geleen]
+  Poland:      [Poland, Polska, Warsaw, Warszawa, Kraków, Krakow, Wrocław, Wroclaw, Poznań, Gdańsk]
+# Fully remote roles. Kept only if the location also mentions one of these.
+remote_keywords: [Europe, EMEA, EU, Spain, Switzerland, Netherlands, Poland]
+
+max_age_days: 45          # ignore postings older than this (when the source gives a date)
+
+# ---------------------------------------------------------------- what to search
+search_terms:
+  - data scientist
+  - machine learning
+  - AI engineer
+  - generative AI
+  - simulation
+  - modeling
+  - computational biology
+  - bioinformatics
+  - data analyst
+  - scientist AI
+
+# Titles matching any of these are dropped before fetching the full posting.
+title_exclude: |-
+  \b(sales|account (executive|manager)|nurse|technician|operator|mechanic|driver|warehouse|
+  accountant|accounting|payroll|recruit\w*|talent acquisition|legal|counsel|paralegal|
+  electrician|maintenance|cleaning|chef|pharmacist|physician|medical science liaison|
+  customer service|field service|buyer|procurement|logistics|supply chain planner|
+  quality assurance specialist|qa specialist|marketing manager|brand manager|key account|
+  administrative|receptionist|facility|security guard|hse|ehs|production worker)\b
+
+# ---------------------------------------------------------------- where to look
+sources:
+  workday:                 # public Workday career-site API: [tenant, host, site, "Display name" (optional)]
+    - [roche,        roche.wd3,        roche-ext]
+    - [novartis,     novartis.wd3,     Novartis_Careers]
+    - [lonza,        lonza.wd3,        Lonza_Careers]
+    - [astrazeneca,  astrazeneca.wd3,  Careers, "AstraZeneca"]
+    - [gsk,          gsk.wd5,          GSKCareers]
+    - [pfizer,       pfizer.wd1,       PfizerCareers]
+    - [jj,           jj.wd5,           JJ, "J&J"]
+    - [sanofi,       sanofi.wd3,       SanofiCareers]
+    - [thermofisher, thermofisher.wd5, ThermoFisherCareers, "Thermo Fisher"]
+    - [philips,      philips.wd3,      jobs-and-careers]
+    - [hp,           hp.wd5,           ExternalCareerSite]
+    - [ing,          ing.wd3,          ICSGBLCOR]
+    - [abb,          abb.wd3,          External_Career_Page]
+    - [accenture,    accenture.wd103,  AccentureCareers]
+    # consulting (added 2026-11-19)
+    - [pwc,          pwc.wd3,          Global_Experienced_Careers, "PwC"]
+    - [icf,          icf.wd5,          ICFExternal_Career_Site, "ICF"]
+    - [kyndryl,      kyndryl.wd5,      KyndrylProfessionalCareers]
+    # pharma / life-sciences consulting and CROs
+    - [iqvia,        iqvia.wd1,        IQVIA, "IQVIA"]
+    - [parexel,      parexel.wd1,      Parexel_External_Careers]
+    - [icon,         icon.wd3,         broadbean_external, "ICON"]
+    # Actualidad Economica "100 Mejores Empresas para Trabajar en Espana" 2026 (added 2026-11-19).
+    # Already listed above: GSK (#3), HP (#4), PwC (#8), AstraZeneca (#58), J&J (#68); Celonis (#30) under greenhouse.
+    - [biibhr,       biibhr.wd3,       external, "Biogen"]                 # Biogen (#62)
+    - [pernodricard, pernodricard.wd3, pernod-ricard, "Pernod Ricard"]            # Pernod Ricard (#16)
+    - [medtronic,    medtronic.wd1,    MedtronicCareers]         # Medtronic (#81)
+    - [iberdrola,    iberdrola.wd3,    Iberdrola]                # Iberdrola (#64)
+    - [enagas,       enagas.wd3,       Portal_Externo, "Enagás"]           # Enagas (#50)
+    - [jll,          jll.wd1,          jllcareers, "JLL"]               # JLL (#65)
+    - [beigene,      beigene.wd5,      BeiGene, "BeOne Medicines"]                  # BeOne Medicines (#29)
+    - [cigna,        cigna.wd5,        cignacareers]             # Cigna Healthcare (#51)
+  greenhouse: [isomorphiclabs, celonis, datadog, typeform, recursionpharmaceuticals]
+  lever: []
+  smartrecruiters: [BoschGroup, santen]                          # santen: Santen Pharmaceutical (#25)
+  # Adzuna aggregates many job boards (free key: https://developer.adzuna.com).
+  # Enabled only if ADZUNA_APP_ID and ADZUNA_APP_KEY are set in the environment.
+  # Descriptions are truncated to ~500 chars, so scores are less reliable.
+  adzuna_countries: [ch, es, nl, pl]
+
+max_results_per_term: 60   # per company and search term
+max_workers: 6             # parallel requests (be polite)
+# Workday blocks bursts per server group (wd1, wd3, wd5…). Seconds between requests to one
+# group: raise it if searches report "rate limited", lower it if searches feel slow.
+workday_pace_seconds: 1.0
+
+# ---------------------------------------------------------------- scoring
+# Points for each distinct keyword found in the posting (regex, case-insensitive).
+keywords:
+  3:
+    - 'python'
+    - 'machine learning'
+    - 'data scien\w+'
+    - 'simulation'
+    - 'discrete[- ]event'
+    - 'mathematical model\w*'
+    - 'bioinformatic\w*'
+    - 'computational biolog\w*'
+    - 'systems biolog\w*'
+    - '\bLLMs?\b'
+    - 'large language model\w*'
+    - 'generative ai'
+    - '\bgenai\b'
+    - '\bRAG\b'
+    - 'retrieval[- ]augmented'
+    - 'agentic'
+    - 'langchain'
+    - 'langgraph'
+    - 'deep learning'
+    - 'differential equation\w*'
+    - '\bODEs?\b'
+    - 'statistical model\w*'
+    - 'protein language model\w*'
+    - '\bPhD\b'
+    - 'modell?ing'
+  2:
+    - 'tensorflow'
+    - 'keras'
+    - 'scikit[- ]learn'
+    - 'pandas'
+    - 'numpy'
+    - '\bNLP\b'
+    - '\btransformers?\b'
+    - 'hugging ?face'
+    - '\bHPC\b'
+    - 'high[- ]performance computing'
+    - '\bSQL\b'
+    - 'matlab'
+    - 'mathematica'
+    - 'optimi[sz]ation'
+    - 'optimal control'
+    - 'statistic\w*'
+    - 'data analy\w+'
+    - 'visuali[sz]ation'
+    - 'plotly'
+    - '\bdash\b'
+    - 'prompt engineering'
+    - 'vector (database|store)s?'
+    - '\bMCP\b'
+    - 'azure'
+    - 'gene therapy'
+    - 'drug discovery'
+    - 'protein design'
+    - 'life sciences?'
+    - 'biotech\w*'
+    - 'pharma\w*'
+    - 'clinical'
+    - 'biostatistic\w*'
+    - 'quantitative'
+    - 'scientific computing'
+    - 'operations research'
+    - 'digital twin'
+    - 'c\+\+'
+    - '\bgit\b'
+    - 'systems? model\w*'
+  1:
+    - 'bash'
+    - 'agile'
+    - 'kanban'
+    - 'stakeholder\w*'
+    - 'scientific writing'
+    - 'publication\w*'
+    - 'research'
+    - 'crewai'
+    - 'llamaindex'
+    - 'faiss'
+    - 'chroma'
+    - 'multidisciplinary'
+    - 'interdisciplinary'
+    - 'diagnostics'
+# Common gaps for this CV: each one found subtracts a point and is listed in the report.
+gaps:
+    - 'mlops'
+    - 'kubernetes'
+    - 'docker'
+    - '\bspark\b'
+    - 'databricks'
+    - 'airflow'
+    - '\bAWS\b'
+    - '\bGCP\b'
+    - '\bjava\b'
+    - '\bscala\b'
+    - '\breact\b'
+    - 'typescript'
+    - 'power ?bi'
+    - 'tableau'
+    - '\bSAP\b'
+    - '\bGMP\b'
+    - '\bGxP\b'
+    - '\bLIMS\b'
+    - 'wet[- ]lab'
+    - 'cell culture'
+    - 'snowflake'
+    - 'terraform'
+
+# Extra points by job title (regex: points). Negative values penalise.
+title_points:
+  'data scien|machine learning|\bml\b|\bai\b|artificial intelligence|llm|genai|generative': 8
+  'simulat|model(l)?ing|computational|bioinformatic|systems biolog|quantitative|data science': 8
+  'scientist': 4
+  'analyst|analytics': 3
+  'research': 2
+  'director|head of|vice president|\bvp\b|principal|chief': -8
+  'manager': -2
+  'intern\b|internship|trainee|apprentice': -4
+
+# Languages the CV does not cover. Required → Skip; "a plus" → noted only.
+lacking_languages: [German, French, Dutch, Polish, Italian, Danish, Swedish, Norwegian, Finnish,
+                    Portuguese, Japanese, Mandarin, Chinese, Korean, Czech, Hungarian]
+# Languages the CV has at a lower level (e.g. conversational rather than fluent).
+# Required fluency → downgrade one level instead of Skip.
+partial_languages: [Spanish, Catalan, Castilian]
+
+experience_years: 6        # postings asking for more than this + 3 years get downgraded
+
+thresholds:                # score → verdict (before blockers/downgrades)
+  apply: 30
+  long_shot: 20

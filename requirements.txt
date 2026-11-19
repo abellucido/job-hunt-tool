@@ -1,0 +1,7 @@
+# jobscout (job search)
+requests>=2.31
+pyyaml>=6.0
+beautifulsoup4>=4.12
+# webapp (local web page)
+fastapi>=0.110
+uvicorn>=0.29

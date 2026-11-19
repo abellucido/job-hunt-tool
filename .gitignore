@@ -1,0 +1,27 @@
+# Allow-list: only the code below is ever committed. Everything else in this folder
+# (your CV in base/, applications in output/, search runs, tracker data) stays private.
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/requirements.txt
+!/jobscout/
+!/webapp/
+!/skills/
+!/base/
+!/docs/
+
+# Private files inside the published folders
+/base/*
+!/base/README.md
+/jobscout/runs/
+/jobscout/seen.sqlite
+/webapp/.venv/
+/webapp/tasks.json
+/webapp/tracker.json
+/webapp/tracker.tmp
+
+# Generated files
+__pycache__/
+*.pyc
+*.bak

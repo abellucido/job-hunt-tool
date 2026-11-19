@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f5; --chip: #e7ebe9; --line: #d9dfdc;
+    --fg: #212d2d; --accent: #363f3a; --muted: #66726b;
+    /* chart roles (dataviz reference palette) */
+    --chart-surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+    --flow-main: #2a78d6;      /* the pipeline: analysed → tailored → applied → interview */
+    --flow-neutral: #898781;   /* endings that are neither good nor bad */
+    --status-good: #0ca30c;    /* offer, accepted — always shown with ✓ + label */
+    --status-critical: #d03b3b;/* rejected — always shown with ✕ + label */
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 64px; }
+  nav { display: flex; gap: 6px; margin-bottom: 18px; }
+  nav a { padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--muted); }
+  nav a.active { background: var(--accent); color: #fff; }
+  nav a:not(.active):hover { background: var(--chip); }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: 18px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 4px 0 20px; }
+  section { border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+  .small { font-size: 12px; color: var(--muted); }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { font-size: 13px; color: var(--muted); }
+  .kpi .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+  .kpi .note { font-size: 12px; color: var(--muted); }
+
+  /* Sankey */
+  .chart-wrap { background: var(--chart-surface); border-radius: 8px; margin-top: 12px; overflow-x: auto; }
+  #sankey { display: block; min-width: 760px; width: 100%; }
+  #sankey .node rect { shape-rendering: crispEdges; }
+  #sankey .link { fill: none; stroke-opacity: .28; transition: stroke-opacity .12s; }
+  #sankey .link:hover, #sankey .link.hl { stroke-opacity: .55; }
+  #sankey text { font-size: 13px; fill: var(--ink); paint-order: stroke; stroke: var(--chart-surface);
+                 stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+  #sankey text .count { fill: var(--ink-2); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                         margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .tooltip { position: fixed; pointer-events: none; background: #fff; border: 1px solid var(--line); border-radius: 6px;
+             padding: 6px 9px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.08); display: none; z-index: 10; }
+  .empty-note { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 14px; margin-top: 10px; }
+
+  /* table */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+  .toolbar .grow { flex: 1; }
+  .toolbar[hidden] { display: none; }
+  input[type=text], input[type=date], select { font: inherit; font-size: 14px; color: inherit; border: 1px solid var(--line);
+                                              border-radius: 6px; padding: 5px 7px; background: var(--bg); }
+  button { font: inherit; font-size: 14px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+           border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  tr:hover td { background: var(--surface); }
+  td input[type=text] { width: 100%; min-width: 160px; }
+  a { color: var(--accent); text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .files a { margin-right: 8px; white-space: nowrap; }
+  .hint { font-size: 12px; color: #8a6d1f; }
+  .saved { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="/">Job Hunt</a><a href="/tracker.html" class="active">Tracker</a></nav>
+  <h1>Tracker</h1>
+  <p class="sub">Every job <code>/apply</code> analysed, from <code>output/</code>. Set each one's status in the table; the numbers and the diagram follow.</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section>
+    <h2>Where your applications go</h2>
+    <div class="small">Each band is a group of applications; its width is how many. Hover a band or a box for numbers.</div>
+    <div class="chart-wrap"><svg id="sankey" role="img" aria-labelledby="sankey-desc"><desc id="sankey-desc"></desc></svg></div>
+    <div class="legend">
+      <span style="--c: var(--flow-main)">Pipeline</span>
+      <span style="--c: var(--flow-neutral)">Waiting / no outcome</span>
+      <span style="--c: var(--status-good)">✓ Offer</span>
+      <span style="--c: var(--status-critical)">✕ Rejected</span>
+    </div>
+    <p class="empty-note" id="empty-note" hidden>No applications are marked as applied yet. Set a status in the table below and the diagram fills in.</p>
+    <details>
+      <summary>Show the flows as a table</summary>
+      <div class="table-wrap"><table><thead><tr><th>From</th><th>To</th><th class="num">Applications</th><th class="num">Share of "from"</th></tr></thead>
+        <tbody id="flows"></tbody></table></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>Applications</h2>
+    <div class="toolbar">
+      <input type="text" id="filter" placeholder="Filter by company or role…" style="min-width:240px">
+      <select id="status-filter"><option value="">All statuses</option></select>
+      <span class="grow"></span>
+      <span class="small" id="count"></span>
+    </div>
+    <div class="toolbar" id="bulk" hidden>
+      <strong id="sel-count"></strong>
+      <label>Set status to <select id="bulk-status"></select></label>
+      <button id="bulk-apply">Apply to selected</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th><input type="checkbox" id="check-all" title="Select all shown"></th>
+          <th>Analysed</th><th>Company</th><th>Role</th><th>Status</th><th>Applied on</th><th>Notes</th><th>Files</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const api = async (url, opts = {}) => {
+  const r = await fetch(url, {headers: {"Content-Type": "application/json"}, ...opts});
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+};
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+let data = null, selected = new Set();
+
+// ------------------------------------------------------------------ KPIs
+function renderKpis(s) {
+  const tile = (label, value, note = "") =>
+    `<div class="kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="note">${esc(note)}</div></div>`;
+  $("#kpis").innerHTML =
+    tile("Analysed", s.analysed, "jobs run through /apply") +
+    tile("Tailored", s.tailored, `${s.analysed - s.tailored} judged a poor fit`) +
+    tile("Applied", s.applied, s.tailored ? `${Math.round(100 * s.applied / s.tailored)}% of tailored` : "") +
+    tile("Response rate", s.response_rate == null ? "–" : `${s.response_rate}%`, `${s.responded} of ${s.applied} replied`) +
+    tile("Interviews", s.interviews, "") +
+    tile("Offers", s.offers, "");
+}
+
+// ------------------------------------------------------------------ Sankey
+const GOOD = new Set(["Offer", "Accepted", "Deciding"]);
+const BAD = new Set(["Rejected", "Rejected after interview"]);
+const MAIN = new Set(["Analysed", "Tailored", "Applied", "Interview"]);
+function nodeColor(name) {
+  if (GOOD.has(name)) return css("--status-good");
+  if (BAD.has(name)) return css("--status-critical");
+  if (MAIN.has(name)) return css("--flow-main");
+  return css("--flow-neutral");
+}
+const icon = (name) => GOOD.has(name) ? "✓ " : BAD.has(name) ? "✕ " : "";
+
+function renderSankey(funnel, summary) {
+  const svg = d3.select("#sankey");
+  svg.selectAll("g").remove();
+  const width = Math.max(760, $("#sankey").parentElement.clientWidth);
+  const height = 420;
+  svg.attr("viewBox", `0 0 ${width} ${height}`).attr("height", height);
+  $("#empty-note").hidden = summary.applied > 0;
+
+  const graph = d3.sankey()
+    .nodeId((d) => d.name)
+    .nodeWidth(12)
+    .nodePadding(22)
+    .nodeSort(null)
+    .nodeAlign(d3.sankeyLeft)           // each ending sits where it happens, not all at the far right
+    .extent([[8, 14], [width - 210, height - 14]])({
+      nodes: funnel.nodes.map((d) => ({...d})),
+      links: funnel.links.map((d) => ({...d})),
+    });
+
+  const tip = $("#tooltip");
+  const showTip = (e, html) => { tip.innerHTML = html; tip.style.display = "block";
+    tip.style.left = `${e.clientX + 14}px`; tip.style.top = `${e.clientY + 12}px`; };
+  const hideTip = () => { tip.style.display = "none"; };
+
+  const links = svg.append("g").selectAll("path").data(graph.links).join("path")
+    .attr("class", "link")
+    .attr("d", d3.sankeyLinkHorizontal())
+    .attr("stroke", (d) => nodeColor(d.target.name))
+    .attr("stroke-width", (d) => Math.max(2, d.width - 2))     // 2px surface gap between bands
+    .on("mousemove", (e, d) => showTip(e, `<strong>${esc(d.source.name)} → ${esc(icon(d.target.name) + d.target.name)}</strong><br>
+        ${d.value} application${d.value === 1 ? "" : "s"} · ${Math.round(100 * d.value / d.source.value)}% of ${esc(d.source.name)}`))
+    .on("mouseleave", hideTip);
+
+  const node = svg.append("g").selectAll("g").data(graph.nodes).join("g").attr("class", "node");
+  node.append("rect")
+    .attr("x", (d) => d.x0).attr("y", (d) => d.y0)
+    .attr("width", (d) => d.x1 - d.x0).attr("height", (d) => Math.max(2, d.y1 - d.y0))
+    .attr("rx", 2).attr("fill", (d) => nodeColor(d.name))
+    .on("mousemove", (e, d) => {
+      links.classed("hl", (l) => l.source === d || l.target === d);
+      showTip(e, `<strong>${esc(icon(d.name) + d.name)}</strong><br>${d.value} application${d.value === 1 ? "" : "s"}`);
+    })
+    .on("mouseleave", () => { links.classed("hl", false); hideTip(); });
+
+  // Direct labels: name + count beside every box (text in ink, never the series colour)
+  const label = node.append("text")
+    .attr("x", (d) => d.x1 + 8)
+    .attr("y", (d) => (d.y0 + d.y1) / 2)
+    .attr("dy", "0.35em");
+  label.append("tspan").text((d) => icon(d.name) + d.name + "  ");
+  label.append("tspan").attr("class", "count").text((d) => d.value);
+
+  $("#sankey-desc").textContent = "Application funnel: " +
+    graph.links.map((l) => `${l.source.name} to ${l.target.name}: ${l.value}`).join("; ");
+  $("#flows").innerHTML = graph.links.map((l) => `<tr><td>${esc(l.source.name)}</td><td>${esc(icon(l.target.name) + l.target.name)}</td>
+    <td class="num">${l.value}</td><td class="num">${Math.round(100 * l.value / l.source.value)}%</td></tr>`).join("");
+}
+
+// ------------------------------------------------------------------ table
+function visibleRows() {
+  const q = $("#filter").value.trim().toLowerCase();
+  const st = $("#status-filter").value;
+  return data.rows.filter((r) => (!st || r.status === st) &&
+    (!q || `${r.company} ${r.role} ${r.location}`.toLowerCase().includes(q)));
+}
+
+function daysSince(d) { return d ? Math.floor((Date.now() - new Date(d)) / 864e5) : null; }
+
+function renderTable() {
+  const shown = visibleRows();
+  $("#count").textContent = `${shown.length} of ${data.rows.length} applications`;
+  const opts = (cur) => data.statuses.map((s) =>
+    `<option value="${s.value}" ${s.value === cur ? "selected" : ""}>${esc(s.label)}</option>`).join("");
+  $("#rows").innerHTML = shown.map((r) => {
+    const waiting = r.status === "applied" && daysSince(r.applied_on) >= 30
+      ? `<div class="hint">Applied ${daysSince(r.applied_on)} days ago: no response?</div>` : "";
+    const files = r.files.map((f) => `<a href="/output/${encodeURIComponent(r.folder)}/${encodeURIComponent(f)}" target="_blank">${
+      {"cv.pdf": "CV", "cover_letter.pdf": "Letter", "analysis.md": "Analysis"}[f]}</a>`).join("");
+    return `<tr data-folder="${esc(r.folder)}">
+      <td><input type="checkbox" class="sel" ${selected.has(r.folder) ? "checked" : ""}></td>
+      <td class="small" style="white-space:nowrap">${esc(r.date)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(r.role)}${r.location ? `<div class="small">${esc(r.location)}</div>` : ""}</td>
+      <td><select class="status">${opts(r.status)}</select>${waiting}</td>
+      <td><input type="date" class="applied" value="${esc(r.applied_on)}"></td>
+      <td><input type="text" class="notes" value="${esc(r.notes)}" placeholder="Add a note"></td>
+      <td class="files">${files}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="small">No applications match.</td></tr>`;
+  updateBulk();
+}
+
+function updateBulk() {
+  $("#bulk").hidden = selected.size === 0;
+  $("#sel-count").textContent = `${selected.size} selected`;
+}
+
+async function save(folders, changes) {
+  await api("/api/tracker", {method: "POST", body: JSON.stringify({folders, ...changes})});
+  await load({keepTable: true});
+}
+
+$("#rows").addEventListener("change", async (e) => {
+  const tr = e.target.closest("tr[data-folder]");
+  if (!tr) return;
+  const folder = tr.dataset.folder;
+  if (e.target.classList.contains("sel")) {
+    e.target.checked ? selected.add(folder) : selected.delete(folder);
+    return updateBulk();
+  }
+  const changes = e.target.classList.contains("status") ? {status: e.target.value}
+    : e.target.classList.contains("applied") ? {applied_on: e.target.value}
+    : e.target.classList.contains("notes") ? {notes: e.target.value} : null;
+  if (!changes) return;
+  try { await save([folder], changes); }
+  catch (err) { alert(`Couldn't save: ${err.message}`); }
+});
+
+$("#check-all").addEventListener("change", (e) => {
+  visibleRows().forEach((r) => e.target.checked ? selected.add(r.folder) : selected.delete(r.folder));
+  renderTable();
+});
+$("#bulk-apply").addEventListener("click", async () => {
+  const status = $("#bulk-status").value;
+  const label = data.statuses.find((s) => s.value === status).label;
+  if (!confirm(`Set ${selected.size} application(s) to "${label}"?`)) return;
+  try { await save([...selected], {status}); selected.clear(); $("#check-all").checked = false; renderTable(); }
+  catch (err) { alert(`Couldn't save: ${err.message}`); }
+});
+$("#filter").addEventListener("input", renderTable);
+$("#status-filter").addEventListener("change", renderTable);
+
+// ------------------------------------------------------------------ load
+async function load({keepTable = false} = {}) {
+  const fresh = await api("/api/tracker");
+  if (!data) {
+    $("#status-filter").innerHTML += fresh.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`).join("");
+    $("#bulk-status").innerHTML = fresh.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`).join("");
+  }
+  data = fresh;
+  renderKpis(data.summary);
+  renderSankey(data.funnel, data.summary);
+  if (keepTable) {   // keep focus and scroll; only refresh the derived bits of the edited rows
+    for (const r of data.rows) {
+      const tr = document.querySelector(`tr[data-folder="${CSS.escape(r.folder)}"]`);
+      if (!tr) continue;
+      tr.querySelector(".status").value = r.status;
+      tr.querySelector(".applied").value = r.applied_on;
+    }
+  } else renderTable();
+}
+let resizeTimer;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => data && renderSankey(data.funnel, data.summary), 150); });
+
+load().catch((err) => { $("#kpis").innerHTML = `<p class="small">Could not load: ${esc(err.message)}</p>`; });
+</script>
+</body>
+</html>
