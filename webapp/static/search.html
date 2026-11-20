@@ -89,6 +89,28 @@
   .company-result.ok { background: #e2efe8; }
   .company-result.warn { background: #f4ecd6; }
   .company-result.bad { background: #f3e1e1; }
+  .add-job { margin: 0 0 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .add-job .add-row { margin: 0 0 8px; }
+  .add-job textarea { min-height: 140px; margin-bottom: 8px; }
+  .add-job .company-result { margin-top: 4px; }
+  .add-job [hidden] { display: none; }
+  /* compatibility (Check fit) */
+  button.check { font-size: 12px; padding: 2px 9px; background: var(--bg); color: var(--accent); border-color: var(--line); white-space: nowrap; }
+  button.check:hover { border-color: var(--accent); }
+  button.fit { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 0; white-space: nowrap; }
+  button.fit.Good { background: #e2efe8; color: var(--apply); }
+  button.fit.Partial { background: #f4ecd6; color: var(--long); }
+  button.fit.Poor { background: #f3e1e1; color: var(--skip); }
+  button.linkish { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline;
+                   text-decoration-color: var(--line); text-underline-offset: 3px; font-size: 12px; }
+  tr.fit-detail > td, tr.fit-detail:hover > td { background: var(--surface); padding: 10px 12px 14px; }
+  tr.fit-detail table { margin: 8px 0; background: var(--bg); font-size: 13px; }
+  tr.fit-detail table tr:hover td { background: var(--bg); }
+  tr.fit-detail th { font-size: 11px; }
+  .req { font-size: 12px; font-weight: 600; }
+  .req.match { color: var(--apply); }
+  .req.partial { color: var(--long); }
+  .req.gap { color: var(--skip); }
   .company-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .company-list .pill { font-weight: 500; }
   .company-list .sys { color: var(--muted); font-weight: 400; margin-left: 4px; }
@@ -153,6 +175,26 @@
 
   <section>
     <h2>2. Shortlist <span class="small" id="run-name"></span></h2>
+    <div class="add-job">
+      <div class="field-title">Add a job from a link</div>
+      <div class="add-row">
+        <input type="text" id="job-link" placeholder="Found a job somewhere else? Paste its link to add it to the list">
+        <input type="text" id="job-company" placeholder="Company (optional)" style="flex:0 1 220px">
+        <button id="job-add">Add to list</button>
+      </div>
+      <div id="job-paste" hidden>
+        <div class="small" style="margin-bottom:6px">Paste the posting instead. It's scored and added the same way.</div>
+        <div class="add-row">
+          <input type="text" id="paste-title" placeholder="Job title">
+          <input type="text" id="paste-company" placeholder="Company">
+          <input type="text" id="paste-location" placeholder="Location (optional)">
+        </div>
+        <textarea id="paste-text" placeholder="The whole posting text"></textarea>
+        <button id="paste-add">Add to list</button>
+        <button class="ghost" id="paste-cancel">Cancel</button>
+      </div>
+      <div id="job-result" class="company-result" hidden></div>
+    </div>
     <div class="toolbar">
       <input type="text" id="filter" placeholder="Filter by company, title or city…" style="min-width:260px">
       <label><input type="checkbox" class="vfilter" value="Apply" checked> Apply</label>
@@ -165,10 +207,10 @@
       <table>
         <thead><tr>
           <th><input type="checkbox" id="check-all" title="Select all shown"></th>
-          <th>Verdict</th><th>Score</th><th>Company</th><th>Title</th><th>Location</th>
+          <th>Verdict</th><th title="Keyword score from jobscout (config.yaml): how much the posting mentions your skills">Score</th><th title="Compatibility with your CV, checked by Claude">Fit</th><th>Company</th><th>Title</th><th>Location</th>
           <th>Posted</th><th>Flags / gaps</th><th>Tailored</th>
         </tr></thead>
-        <tbody id="jobs"><tr><td colspan="9" class="empty">Run a search or open an earlier one.</td></tr></tbody>
+        <tbody id="jobs"><tr><td colspan="10" class="empty">Run a search or open an earlier one.</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -185,6 +227,7 @@
     <option value="">Default (Claude Code's model)</option>
     <option value="sonnet">Sonnet (lighter on limits)</option>
   </select></label>
+  <button class="ghost" id="fit-btn" title="Ask Claude how well your CV fits each selected job">Check fit</button>
   <button id="apply-btn">Tailor CV + cover letter</button>
   <button class="ghost" id="clear-btn">Clear selection</button>
   <span class="small" id="limit-note"></span>
@@ -245,6 +288,30 @@ function visibleJobs() {
     (!q || `${j.company} ${j.title} ${j.location}`.toLowerCase().includes(q)));
 }
 
+const FIT_STATUS = {match: "✓ Match", partial: "≈ Partial", gap: "✕ Gap"};
+let openFits = new Set(), fitTimer = null;
+
+function fitCell(j) {
+  const f = j.fit;
+  if (f && f.status === "running") return `<span class="pill running">checking…</span>`;
+  if (f && f.status === "done")
+    return `<button class="fit ${f.rating}" data-fit-open="${esc(j.file)}" title="Show the requirements">${f.score}% ${f.rating} ${openFits.has(j.file) ? "▴" : "▾"}</button>`;
+  if (f && f.status === "failed")
+    return `<button class="check" data-fit="${esc(j.file)}" title="${esc(f.error)}">Retry</button><div class="small" style="color:var(--skip)">check failed</div>`;
+  return `<button class="check" data-fit="${esc(j.file)}" title="Ask Claude how well your CV fits this job (about 30 s)">Check fit</button>`;
+}
+
+function fitDetail(j) {
+  const f = j.fit;
+  const rows = f.requirements.map((r) => `<tr><td>${esc(r.requirement)}${r.importance === "nice" ? ' <span class="small">(nice to have)</span>' : ""}</td>
+      <td style="white-space:nowrap"><span class="req ${r.status}">${FIT_STATUS[r.status]}</span></td><td class="small">${esc(r.evidence)}</td></tr>`).join("");
+  return `<tr class="fit-detail"><td></td><td colspan="9">
+      <div><strong>${f.score}% ${esc(f.rating)}</strong> · ${esc(f.summary)}</div>
+      <table><thead><tr><th>Requirement</th><th>Your CV</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="small">Checked ${esc(f.checked)} by Claude against <code>base/cv_master.tex</code>${f.cost_usd ? ` · ≈ $${f.cost_usd} at API prices` : ""} ·
+        <button class="linkish" data-fit="${esc(j.file)}">Check again</button></div></td></tr>`;
+}
+
 function renderJobs() {
   const shown = visibleJobs();
   $("#count").textContent = `${shown.length} of ${jobs.length} postings`;
@@ -257,16 +324,60 @@ function renderJobs() {
       <td><input type="checkbox" data-file="${esc(j.file)}" ${selected.has(j.file) ? "checked" : ""}></td>
       <td><span class="pill ${esc(j.verdict.split(" ")[0])}">${esc(j.verdict)}</span></td>
       <td class="num">${esc(j.score)}</td>
-      <td>${esc(j.company)}</td>
+      <td>${fitCell(j)}</td>
+      <td>${run === "added"
+        ? (j.company ? `${esc(j.company)} <button class="linkish" data-company="${esc(j.file)}" title="Change the company">✎</button>`
+                     : `<button class="check" data-company="${esc(j.file)}">Add company</button>`)
+        : esc(j.company)}</td>
       <td><a href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>${j.new ? '<span class="new">NEW</span>' : ""}
           <div class="small"><a href="/api/runs/${encodeURIComponent(run)}/jobs/${encodeURIComponent(j.file)}" target="_blank">posting text</a></div></td>
       <td class="small">${esc(j.location.split("; ").filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 3).join("; "))}</td>
       <td class="small" style="white-space:nowrap">${esc(j.posted)}</td>
       <td class="small">${esc(flags)}</td>
-      <td>${status}</td></tr>`;
-  }).join("") : `<tr><td colspan="9" class="empty">No postings match.</td></tr>`;
+      <td>${status}</td></tr>` + (j.fit && j.fit.status === "done" && openFits.has(j.file) ? fitDetail(j) : "");
+  }).join("") : `<tr><td colspan="10" class="empty">No postings match.</td></tr>`;
   updateBar();
+  clearTimeout(fitTimer);
+  if (jobs.some((j) => j.fit && j.fit.status === "running")) fitTimer = setTimeout(reloadRun, 4000);
 }
+
+async function reloadRun() {          // refresh the list (fit results) without losing the selection
+  if (!run) return;
+  const data = await api(`/api/runs/${encodeURIComponent(run)}`);
+  jobs = data.jobs;
+  renderJobs();
+}
+
+async function setCompany(file) {
+  const job = jobs.find((j) => j.file === file);
+  const name = prompt(`Company for "${job.title}":`, job.company || "");
+  if (name == null || !name.trim()) return;
+  try {
+    await api("/api/added/company", {method: "POST", body: JSON.stringify({file, company: name.trim()})});
+    await reloadRun();
+  } catch (err) { alert(`Couldn't save: ${err.message}`); }
+}
+
+async function checkFit(files) {
+  if (!files.length) return;
+  try {
+    await api("/api/fit", {method: "POST", body: JSON.stringify({run, files})});
+    await reloadRun();
+  } catch (err) { alert(`Couldn't start the check: ${err.message}`); }
+}
+
+$("#jobs").addEventListener("click", (e) => {
+  const open = e.target.closest("[data-fit-open]");
+  if (open) {
+    const f = open.dataset.fitOpen;
+    openFits.has(f) ? openFits.delete(f) : openFits.add(f);
+    return renderJobs();
+  }
+  const co = e.target.closest("[data-company]");
+  if (co) return setCompany(co.dataset.company);
+  const btn = e.target.closest("[data-fit]");
+  if (btn) { btn.disabled = true; checkFit([btn.dataset.fit]); }
+});
 
 function updateBar() {
   $("#sel-count").textContent = `${selected.size} selected`;
@@ -286,6 +397,53 @@ $("#check-all").addEventListener("change", (e) => {
 $("#filter").addEventListener("input", renderJobs);
 document.querySelectorAll(".vfilter").forEach((c) => c.addEventListener("change", renderJobs));
 $("#runs").addEventListener("change", (e) => openRun(e.target.value));
+// ------------------------------------------------------------------ add a job from a link
+function showJobResult(kind, html) {
+  const box = $("#job-result");
+  box.className = `company-result ${kind}`;
+  box.innerHTML = html;
+  box.hidden = !html;
+}
+
+async function addJob(body) {
+  const buttons = [$("#job-add"), $("#paste-add")];
+  buttons.forEach((b) => b.disabled = true);
+  showJobResult("", body.text ? "Scoring the posting…" : "Reading the posting…");
+  try {
+    const r = await api("/api/add-job", {method: "POST", body: JSON.stringify(body)});
+    $("#job-link").value = ""; $("#job-company").value = "";
+    ["#paste-title", "#paste-company", "#paste-location", "#paste-text"].forEach((id) => $(id).value = "");
+    $("#job-paste").hidden = true;
+    await loadRuns(r.run);                      // open the "Added from links" list
+    const warning = [r.warning, !r.company && "The page doesn't say which company this is: use Add company in the list."].filter(Boolean).join(" ");
+    r.warning = warning;
+    showJobResult(r.warning ? "warn" : "ok", `${r.updated ? "Updated" : "Added"} <strong>${r.company ? `${esc(r.company)}: ` : ""}${esc(r.title)}</strong> ` +
+      `in <em>Added from links</em> <span class="pill ${esc(r.verdict.split(" ")[0])}">${esc(r.verdict)}</span> score ${esc(r.score)}` +
+      `${r.flags ? ` · ${esc(r.flags)}` : ""}. Use <strong>Check fit</strong> to see how well your CV matches, or tick it to tailor it.` +
+      (r.warning ? `<br>⚠ ${esc(r.warning)}` : ""));
+  } catch (err) {
+    const pasteHelps = !/Fill in the job title|too short/.test(err.message);
+    showJobResult("bad", esc(err.message));
+    if (pasteHelps && !body.text) { $("#job-paste").hidden = false; $("#paste-title").focus(); }
+  } finally {
+    buttons.forEach((b) => b.disabled = false);
+  }
+}
+$("#job-add").addEventListener("click", () => {
+  const url = $("#job-link").value.trim();
+  if (url) addJob({url, company: $("#job-company").value.trim()});
+});
+$("#job-link").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#job-add").click(); });
+$("#paste-add").addEventListener("click", () => addJob({
+  url: $("#job-link").value.trim(), text: $("#paste-text").value, title: $("#paste-title").value,
+  company: $("#paste-company").value, location: $("#paste-location").value}));
+$("#paste-cancel").addEventListener("click", () => { $("#job-paste").hidden = true; showJobResult("", ""); });
+
+$("#fit-btn").addEventListener("click", () => {
+  const files = [...selected].filter((f) => !(jobs.find((j) => j.file === f)?.fit?.status === "running"));
+  if (files.length > 5 && !confirm(`Check fit for ${files.length} jobs? Each takes about 30 s and counts against your Claude usage limits.`)) return;
+  checkFit(files);
+});
 $("#clear-btn").addEventListener("click", () => { selected.clear(); $("#check-all").checked = false; renderJobs(); });
 
 const chosenCountries = () => [...document.querySelectorAll("#countries input:checked")].map((c) => c.value);
@@ -314,7 +472,7 @@ $("#search-btn").addEventListener("click", async () => {
     $("#runs").value = "";
     $("#run-name").textContent = "· searching…";
     $("#count").textContent = "";
-    $("#jobs").innerHTML = `<tr><td colspan="9" class="empty">Searching… results will appear here when the search finishes.</td></tr>`;
+    $("#jobs").innerHTML = `<tr><td colspan="10" class="empty">Searching… results will appear here when the search finishes.</td></tr>`;
     let s = await api("/api/search", {method: "POST", body: JSON.stringify(body)});
     while (s.status === "running") {
       await new Promise((r) => setTimeout(r, 2000));

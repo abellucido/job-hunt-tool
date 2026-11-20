@@ -25,7 +25,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 import companies
+import fit
+import posting
 import tracker
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jobscout"))
+import jobscout  # noqa: E402  (its Scorer, Job and seen.sqlite, so added jobs are scored like searched ones)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -81,8 +86,10 @@ def read_shortlist(run: str) -> list[dict]:
     with open(path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     tailored = {(t["run"], t["file"]): t["id"] for t in tasks.values()}
+    fits = fit.load(RUNS / run)
     for row in rows:
         row["task"] = tailored.get((run, row["file"]))
+        row["fit"] = {"status": "running"} if (run, row["file"]) in fits_running else fits.get(row["file"])
     return rows
 
 
@@ -124,11 +131,46 @@ def settings():
     }
 
 
+# Jobs added by hand from a link (Search page): a run folder of their own, jobscout/runs/added/,
+# with the same shortlist.csv and jobs/*.txt a search writes. It is listed last among the runs.
+ADDED_RUN = "added"
+SHORTLIST_FIELDS = ["verdict", "score", "new", "company", "title", "location", "posted", "flags", "gaps", "url", "file"]
+
+
+class AddJobRequest(BaseModel):
+    url: str = ""
+    text: str = ""           # the posting, pasted when the link can't be read; then title and company are needed
+    title: str = ""
+    company: str = ""
+    location: str = ""
+
+
+def read_added() -> list[dict]:
+    path = RUNS / ADDED_RUN / "shortlist.csv"
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def write_added(rows: list[dict]):
+    path = RUNS / ADDED_RUN / "shortlist.csv"
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=SHORTLIST_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    tmp.replace(path)
+
+
 AGE_LABELS = {1: "24 hours", 3: "3 days", 7: "1 week", 30: "1 month"}
 
 
 def run_label(d: Path) -> str:
     """e.g. "19 Nov 14:42 · Spain · 24 hours · 7 postings", from the run's search.json."""
+    if d.name == ADDED_RUN:
+        n = len(read_added())
+        return f"Added from links · {n} posting{'' if n == 1 else 's'}"
     with open(d / "shortlist.csv", encoding="utf-8") as f:
         count = max(sum(1 for _ in f) - 1, 0)
     try:
@@ -143,8 +185,11 @@ def run_label(d: Path) -> str:
 
 @app.get("/api/runs")
 def list_runs():
+    """Saved searches, newest first, then the "Added from links" list if there is one."""
     runs = [d for d in RUNS.iterdir() if (d / "shortlist.csv").exists()] if RUNS.exists() else []
-    return [{"name": d.name, "label": run_label(d)} for d in sorted(runs, key=lambda d: d.name, reverse=True)]
+    searches_ = sorted((d for d in runs if d.name != ADDED_RUN), key=lambda d: d.name, reverse=True)
+    added = [d for d in runs if d.name == ADDED_RUN]
+    return [{"name": d.name, "label": run_label(d)} for d in searches_ + added]
 
 
 @app.get("/api/runs/{run}")
@@ -248,7 +293,7 @@ def dashboard():
     active = [r for r in rows if r["status"] in ("interview", "offer")]
 
     latest = None
-    runs = list_runs()
+    runs = [r for r in list_runs() if r["name"] != ADDED_RUN]
     if runs:
         jobs = read_shortlist(runs[0]["name"])
         verdicts = {}
@@ -271,7 +316,7 @@ def dashboard():
         "tailoring": {
             "running": sum(t["status"] == "running" for t in tasks.values()),
             "queued": sum(t["status"] == "queued" for t in tasks.values()),
-            "failed_recent": [{"company": t["company"], "title": t["title"], "error": (t.get("error") or "")[:200]}
+            "failed_recent": [{"company": t["company"] or t["title"], "title": t["title"], "error": (t.get("error") or "")[:200]}
                               for t in tasks.values() if t["status"] == "failed" and t["created"] >= week_ago],
         },
     }
@@ -329,6 +374,74 @@ def search_status(sid: str):
     return searches[sid]
 
 
+# ------------------------------------------------------------------ compatibility check (Check fit)
+
+FIT_PARALLEL = 3            # fit checks at the same time
+FIT_TIMEOUT = 5 * 60        # seconds
+FIT_MODEL = ""              # "" = Claude Code's default model, or e.g. "sonnet" to go lighter on usage limits
+FACTS = ROOT / "base" / "facts.md"
+fits_running: set[tuple[str, str]] = set()
+fit_semaphore = asyncio.Semaphore(FIT_PARALLEL)
+
+
+class FitRequest(BaseModel):
+    run: str
+    files: list[str]
+
+
+@app.post("/api/fit")
+async def check_fit(req: FitRequest):
+    """Start a compatibility check for each job; results land in runs/<run>/fit.json."""
+    files = {r["file"] for r in read_shortlist(req.run)}
+    started = []
+    for file in req.files:
+        if file not in files:
+            raise HTTPException(404, f"{file} is not in run {req.run}")
+        if (req.run, file) not in fits_running:
+            fits_running.add((req.run, file))
+            asyncio.create_task(run_fit(req.run, file))
+            started.append(file)
+    return {"started": started}
+
+
+def clear_fit(run: str, file: str):
+    fit.save(RUNS / run, file, None)
+
+
+async def run_fit(run: str, file: str):
+    run_dir = RUNS / run
+    try:
+        async with fit_semaphore:
+            prompt = fit.build_prompt((run_dir / "jobs" / file).read_text(encoding="utf-8"),
+                                      CV_MASTER.read_text(encoding="utf-8"),
+                                      FACTS.read_text(encoding="utf-8") if FACTS.exists() else "")
+            cmd = [CLAUDE, "-p", "--output-format", "json"] + (["--model", FIT_MODEL] if FIT_MODEL else [])
+            proc = await asyncio.create_subprocess_exec(*cmd, cwd=HERE, stdin=asyncio.subprocess.PIPE,
+                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                out, err = await asyncio.wait_for(proc.communicate(prompt.encode()), FIT_TIMEOUT)
+            except asyncio.TimeoutError:
+                proc.kill()
+                raise RuntimeError(f"Stopped after {FIT_TIMEOUT // 60} minutes.")
+        try:
+            reply = json.loads(out)
+        except json.JSONDecodeError:
+            raise RuntimeError((err or out).decode(errors="replace")[-500:] or "No output from claude")
+        if reply.get("is_error"):
+            raise RuntimeError(str(reply.get("result", "Claude reported an error"))[:500])
+        try:
+            result = fit.parse(reply.get("result", ""))
+        except (ValueError, KeyError, TypeError) as e:
+            raise RuntimeError(f"Couldn't read Claude's answer: {e}")
+        result["cost_usd"] = round(reply.get("total_cost_usd") or 0, 3)
+    except Exception as e:                               # any failure is shown on the job, with a retry
+        result = {"status": "failed", "error": str(e) or e.__class__.__name__, "checked": date.today().isoformat()}
+    try:
+        fit.save(run_dir, file, result)                  # save first, so the job never looks unchecked meanwhile
+    finally:
+        fits_running.discard((run, file))
+
+
 # ------------------------------------------------------------------ tailoring (/apply)
 
 class ApplyRequest(BaseModel):
@@ -351,14 +464,102 @@ async def start_apply(req: ApplyRequest):
         if busy:
             continue
         row = rows[file]
-        tid = uuid.uuid4().hex[:8]
-        tasks[tid] = {"id": tid, "run": req.run, "file": file, "company": row["company"], "title": row["title"],
-                      "url": row["url"], "model": req.model or "default", "status": "queued",
-                      "created": time.time()}
-        created.append(tid)
-        asyncio.create_task(run_apply(tid))
+        created.append(queue_apply(req.run, file, row["company"], row["title"], row["url"], req.model))
     save_tasks()
     return {"created": created}
+
+
+def queue_apply(run: str, file: str, company: str, title: str, url: str, model: str) -> str:
+    """Add a tailoring run for jobscout/runs/<run>/jobs/<file> and start it when a slot is free."""
+    tid = uuid.uuid4().hex[:8]
+    tasks[tid] = {"id": tid, "run": run, "file": file, "company": company, "title": title, "url": url,
+                  "model": model or "default", "status": "queued", "created": time.time()}
+    asyncio.create_task(run_apply(tid))
+    return tid
+
+
+class AddedUpdate(BaseModel):
+    file: str
+    company: str
+
+
+@app.post("/api/added/company")
+def set_added_company(u: AddedUpdate):
+    """Set the company of a job in "Added from links" (some pages don't say which company it is)."""
+    company = u.company.strip()
+    if not company:
+        raise HTTPException(400, "Type the company name.")
+    rows = read_added()
+    row = next((r for r in rows if r["file"] == safe(u.file)), None)
+    if not row:
+        raise HTTPException(404, "That job isn't in the Added from links list.")
+    row["company"] = company
+    write_added(rows)
+    path = RUNS / ADDED_RUN / "jobs" / row["file"]           # /apply reads the company from this header
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        text = re.sub(r"^Company:.*$", lambda _: f"Company: {company}", text, count=1, flags=re.M)
+        path.write_text(text, encoding="utf-8")
+    for t in tasks.values():                                  # its tailoring cards on the Search page
+        if t["run"] == ADDED_RUN and t["file"] == row["file"]:
+            t["company"] = company
+    save_tasks()
+    return {"file": row["file"], "company": company}
+
+
+@app.post("/api/add-job")
+def add_job(req: AddJobRequest):
+    """Read a posting from a link (or take pasted text), score it like jobscout does and add it
+    to the "Added from links" list. Tailoring it is then the same as for any search result.
+    Adding a link that is already in the list reads it again and replaces its entry."""
+    url, text = req.url.strip(), req.text.strip()
+    if not url and not text:
+        raise HTTPException(400, "Paste a link to the job posting.")
+    rows = read_added()
+    old = next((r for r in rows if url and r["url"] == url), None)
+    if text:
+        if not req.title.strip() or not req.company.strip():
+            raise HTTPException(400, "Fill in the job title and company too.")
+        if len(text) < 200:
+            raise HTTPException(400, "That's too short to be a job posting. Paste the whole posting text.")
+        job = {"title": req.title.strip(), "company": req.company.strip(), "location": req.location.strip(),
+               "posted": "", "url": url, "description": text}
+    else:
+        try:
+            job = posting.fetch(url, companies.list_companies(CONFIG))
+        except posting.PostingError as e:
+            raise HTTPException(422, str(e))
+        if req.company.strip():                     # typed by the user: wins over what the page says
+            job["company"] = req.company.strip()
+
+    # Score with jobscout's own rules (config.yaml), and remember it in seen.sqlite like a search does.
+    cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    j = jobscout.Job("added", job["company"], job["title"], job["url"] or f"pasted:{job['company']}:{job['title']}",
+                     [job["location"]], jobscout.parse_date(job["posted"]) if job["posted"] else None, job["description"])
+    jobscout.Scorer(cfg).score(j)
+    db = jobscout.open_db()
+    j.new = db.execute("SELECT 1 FROM jobs WHERE key=?", (j.key,)).fetchone() is None
+    today = date.today().isoformat()
+    db.execute("""INSERT INTO jobs VALUES (?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET
+                  last_seen=excluded.last_seen, score=excluded.score, verdict=excluded.verdict""",
+               (j.key, j.company, j.title, today, today, j.score, j.verdict))
+    db.commit()
+    db.close()
+
+    jobs_dir = RUNS / ADDED_RUN / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    # Same file name when refreshing, so tailoring runs and fit checks stay linked to it.
+    file = old["file"] if old else f"{datetime.now():%Y%m%d_%H%M%S}_{jobscout.slug(j.company, 20)}_{jobscout.slug(j.title)}.txt"
+    (jobs_dir / file).write_text(
+        f"Title: {j.title}\nCompany: {j.company}\nLocation: {job['location'] or '?'}\n"
+        f"Posted: {job['posted'] or '?'}\nURL: {job['url'] or '(pasted text)'}\n\n{j.description}\n", encoding="utf-8")
+    row = {"verdict": j.verdict, "score": str(j.score), "new": "NEW" if j.new else "", "company": j.company,
+           "title": j.title, "location": job["location"], "posted": job["posted"], "flags": "; ".join(j.flags),
+           "gaps": ", ".join(j.gaps), "url": job["url"], "file": file}
+    write_added([row] + [r for r in rows if r is not old])        # newest first
+    if old:
+        clear_fit(ADDED_RUN, file)                                 # the posting changed: check it again
+    return {"run": ADDED_RUN, **row, "updated": bool(old), "warning": job.get("warning", "")}
 
 
 async def run_apply(tid: str):

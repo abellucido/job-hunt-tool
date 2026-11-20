@@ -15,6 +15,7 @@ and tracks every application through to an offer.
    posting against keywords from your CV. It flags required languages you don't speak, seniority
    mismatches and skill gaps.
 2. **Shortlist.** A local web page shows the ranked postings. Tick the ones worth applying to.
+   A job found elsewhere can be added by pasting its link; it's scored the same way.
 3. **Tailor.** For each ticked job, the page runs Claude Code headless with the `/apply` skill:
    it maps the job's requirements to evidence in your CV, rewrites the profile, reorders skills and
    bullets, fills in the cover letter, checks that no date, title or number changed, and compiles

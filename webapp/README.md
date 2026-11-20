@@ -13,7 +13,9 @@ and the best matches from the latest search. The steps below happen on the **Sea
 
 1. **Search:** choose countries, how recent, and keywords, then *Search jobs*.
    Each search is saved under `jobscout/runs/<date_time>/` and can be reopened from the dropdown.
-2. **Shortlist:** filter, read the posting text, tick the jobs you want.
+2. **Shortlist:** filter, read the posting text, tick the jobs you want. *Check fit* asks Claude
+   how well your CV matches a job (0–100%, with each requirement matched or missing). Found a job
+   somewhere else? Paste its link above the list: it's scored and added to the *Added from links* list.
 3. **Tailor:** runs `claude -p "/apply <job file>"` for each ticked job, 3 at a time
    (about 3 minutes each). Results appear under *Tailored applications*; files go to `output/`.
 
@@ -44,6 +46,8 @@ a terminal and shows their results, so each part can be tested on its own.
 |---|---|
 | `webapp/app.py` | The server: API endpoints, starts jobscout and `claude`, keeps the run history |
 | `webapp/companies.py` | Lists, checks and adds companies in `jobscout/config.yaml` |
+| `webapp/posting.py` | Reads one job posting from a link, for adding a job to the *Added from links* list |
+| `webapp/fit.py`, `webapp/fit_prompt.md` | *Check fit*: builds the prompt, reads Claude's answer, stores results. Edit `fit_prompt.md` to change how fit is judged |
 | `webapp/tracker.py` | Tracker rows (one per `output/` folder), statuses, the funnel and the summary numbers |
 | `webapp/static/tracker.html` | The Tracker page: stat tiles, Sankey diagram (d3-sankey), applications table |
 | `webapp/tracker.json` | Your statuses, applied dates and notes, keyed by output folder. **Back this up**: it's the only place they're stored |
@@ -66,6 +70,8 @@ a terminal and shows their results, so each part can be tested on its own.
 | `POST /api/companies/check` | Is a company (name or link) already included? If not, find and test its job board |
 | `POST /api/companies` | Add a checked company to `config.yaml` |
 | `GET /api/dashboard` | Everything the Dashboard shows, in one call |
+| `POST /api/fit` | Start *Check fit* for one or more jobs of a run (results come back with the run's jobs) |
+| `POST /api/add-job` | Read a posting from a link (or take pasted text), score it and add it to *Added from links* |
 | `GET /api/tracker` | Tracker rows, summary numbers, Sankey nodes/links, status list |
 | `POST /api/tracker` | Set status, applied date or notes for one or more output folders |
 | `GET /api/runs/<run>/jobs/<file>` | Full text of one posting |
@@ -103,6 +109,47 @@ status the same way the Tracker does (*Mark applied* dates it today). *Latest se
 `/search.html?run=<run>`, which opens that run. The weekly chart counts tailored jobs by the output
 folder's date and applications by their applied-on date.
 
+### Adding a job from a link (Search page)
+
+Paste a posting's link above the shortlist and *Add to list*. `POST /api/add-job` reads the posting
+with `posting.py`, scores it with jobscout's own `Scorer` (same keywords, gaps, flags and verdicts
+from `config.yaml`) and records it in `seen.sqlite`. It then adds it to `jobscout/runs/added/`: the
+same `shortlist.csv` and `jobs/*.txt` a search writes. That run shows as *Added from links*, last in
+the searches dropdown, and keeps every job you add, newest first. Tick a job there to tailor it,
+like any search result. The Dashboard's *Latest search* ignores this list.
+
+How the posting is read:
+- **Workday, Greenhouse, Lever, SmartRecruiters** links go through the job system's public API
+  (the ones jobscout uses), which gives the full text even where the page itself needs JavaScript.
+- **Phenom career sites** (e.g. jobs.thermofisher.com): the job data embedded in the page. Its job
+  summary (required skills, education, pay) is added below the description, because these sites
+  often leave the skills out of the description itself.
+- **Any other site:** the page's schema.org `JobPosting` data, which most career sites and job
+  boards include; failing that, the page's main text.
+- A posting under 300 words gets a warning: open its posting text and check nothing is missing.
+- If neither works (a login wall such as LinkedIn when signed out, or a JavaScript-only page), the
+  page asks you to paste the posting with its title and company instead.
+
+Some pages don't say which company the job is at: type it in the *Company (optional)* box next to
+the link, or use *Add company* (✎ to change it) on the job in the list. That also updates the
+posting file `/apply` reads.
+
+Adding a link that's already in the list reads it again and replaces its entry (its fit check is
+cleared). To remove a job from the list, delete its line in `jobscout/runs/added/shortlist.csv`.
+
+### Score vs Fit
+
+The list shows two different numbers:
+
+- **Score** (jobscout, free and instant): points for keywords from `config.yaml` found in the
+  posting (+3/+2/+1 each), plus title points, minus 1 per gap. 30+ is *Apply*, 20–29 *Long shot*. It
+  says how much the posting *mentions* your skills; it's for sorting many postings quickly.
+- **Fit** (Claude, on demand): Claude picks the posting's 5–8 key requirements, checks each against
+  `base/cv_master.tex` (and `base/facts.md`) as match / partial / gap, and scores 0–100: 70+ *Good*,
+  45–69 *Partial*, under 45 *Poor*. The same kind of analysis `/apply` does before tailoring, without
+  tailoring anything. One `claude -p` call per job, about 30 s, counting against your usage limits.
+  Click the result to see every requirement. Results are saved in `jobscout/runs/<run>/fit.json`.
+
 ### The Tracker page (`/tracker.html`)
 
 Every folder in `output/` is one row: company, role and location come from the first line of its
@@ -128,6 +175,8 @@ Choosing a status beyond *Not applied yet* without an applied date sets the date
 | Change the default country | `search.html`, search for `defaultCountry` |
 | Change the "Posted within" choices | `search.html`, the `<select id="max-age">` options (value = days) |
 | Run more or fewer tailoring jobs at once | `app.py` → `MAX_PARALLEL` |
+| Change how *Check fit* judges a job | `webapp/fit_prompt.md` (the instructions Claude gets). Thresholds for Good/Partial/Poor: `rating()` in `fit.py` |
+| Use a lighter model for *Check fit* | `app.py` → `FIT_MODEL = "sonnet"` |
 | Change the stuck-run time limit | `app.py` → `RUN_TIMEOUT` (seconds) |
 | Change how tailoring works | Edit the skill: `~/.claude/skills/apply/SKILL.md`. The app needs no change |
 | Change when an application shows under *Follow up* | `app.py` → `FOLLOW_UP_DAYS` |

@@ -117,6 +117,7 @@ keywords:
     - '\bPhD\b'
     - 'modell?ing'
   2:
+    - '(?<![\w&\-/.])R(?![\w&\-''’])'   # the R language, not R&D or a req id like R-01369543
     - 'tensorflow'
     - 'keras'
     - 'scikit[- ]learn'
@@ -171,6 +172,7 @@ keywords:
     - 'multidisciplinary'
     - 'interdisciplinary'
     - 'diagnostics'
+    - 'sample[- ]size'
 # Common gaps for this CV: each one found subtracts a point and is listed in the report.
 gaps:
     - 'mlops'
@@ -195,6 +197,8 @@ gaps:
     - 'cell culture'
     - 'snowflake'
     - 'terraform'
+    - '\bSAS\b'
+    - 'CDISC'
 
 # Extra points by job title (regex: points). Negative values penalise.
 title_points:
@@ -203,6 +207,7 @@ title_points:
   'scientist': 4
   'analyst|analytics': 3
   'research': 2
+  'statistic': 6           # statistician, biostatistician, statistics
   'director|head of|vice president|\bvp\b|principal|chief': -8
   'manager': -2
   'intern\b|internship|trainee|apprentice': -4
