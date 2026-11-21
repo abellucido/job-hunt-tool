@@ -1,0 +1,92 @@
+# Countries the search can use (the Countries dropdown on the Search page).
+#
+# A posting is kept when its location mentions the country's name or one of its `words`: other
+# names for the country and its main cities. A fully remote posting is kept when it mentions the
+# country or its region's words (e.g. "Remote, EMEA"). `code` is the ISO code SmartRecruiters uses.
+#
+# A country listed under `locations:` in config.yaml uses that list instead of this one, so add
+# smaller towns or company sites there (e.g. Kaiseraugst for Roche). Place names that also exist
+# elsewhere (Cambridge, Georgia, Victoria…) are left out on purpose: they would let in postings
+# from the wrong country.
+
+regions:
+  Europe: [Europe, EMEA, EU]
+  Americas: [Americas, North America, LATAM, Latin America]
+  Asia-Pacific: [APAC, Asia Pacific, Asia]
+  Middle East & Africa: [EMEA, MEA, Middle East, Africa]
+
+countries:
+  # ---------------------------------------------------------------- Europe
+  Austria:        {code: at, region: Europe, words: [Österreich, Vienna, Wien, Graz, Linz, Salzburg, Innsbruck]}
+  Belgium:        {code: be, region: Europe, words: [België, Belgique, Belgien, Brussels, Bruxelles, Brussel, Antwerp, Antwerpen, Ghent, Gent, Leuven, Liège, Wavre, Beerse, Mechelen]}
+  Bulgaria:       {code: bg, region: Europe, words: [България, Sofia, Plovdiv, Varna]}
+  Croatia:        {code: hr, region: Europe, words: [Hrvatska, Zagreb, Split, Rijeka]}
+  Cyprus:         {code: cy, region: Europe, words: [Κύπρος, Nicosia, Limassol, Larnaca]}
+  Czech Republic: {code: cz, region: Europe, words: [Czechia, Česko, Česká republika, Prague, Praha, Brno, Ostrava]}
+  Denmark:        {code: dk, region: Europe, words: [Danmark, Copenhagen, København, Aarhus, Odense, Bagsværd, Kalundborg]}
+  Estonia:        {code: ee, region: Europe, words: [Eesti, Tallinn, Tartu]}
+  Finland:        {code: fi, region: Europe, words: [Suomi, Helsinki, Espoo, Tampere, Turku, Oulu]}
+  France:         {code: fr, region: Europe, words: [Paris, Lyon, Marseille, Toulouse, Lille, Nantes, Strasbourg, Bordeaux, Grenoble, Montpellier, Sophia Antipolis, Île-de-France]}
+  Germany:        {code: de, region: Europe, words: [Deutschland, Berlin, Munich, München, Hamburg, Frankfurt, Cologne, Köln, Düsseldorf, Stuttgart, Heidelberg, Mannheim, Darmstadt, Leverkusen, Penzberg, Mainz, Dresden, Leipzig]}
+  Greece:         {code: gr, region: Europe, words: [Ελλάδα, Hellas, Athens, Αθήνα, Thessaloniki]}
+  Hungary:        {code: hu, region: Europe, words: [Magyarország, Budapest, Debrecen, Szeged]}
+  Iceland:        {code: is, region: Europe, words: [Ísland, Reykjavik, Reykjavík]}
+  Ireland:        {code: ie, region: Europe, words: [Éire, Dublin, Cork, Galway, Limerick]}
+  Italy:          {code: it, region: Europe, words: [Italia, Rome, Roma, Milan, Milano, Turin, Torino, Bologna, Florence, Firenze, Naples, Napoli, Pisa, Siena, Verona]}
+  Latvia:         {code: lv, region: Europe, words: [Latvija, Riga, Rīga]}
+  Lithuania:      {code: lt, region: Europe, words: [Lietuva, Vilnius, Kaunas]}
+  Luxembourg:     {code: lu, region: Europe, words: [Lëtzebuerg, Luxemburg]}
+  Malta:          {code: mt, region: Europe, words: [Valletta]}
+  Netherlands:    {code: nl, region: Europe, words: [Nederland, Holland, Amsterdam, Rotterdam, Eindhoven, Leiden, Utrecht, The Hague, Den Haag, Groningen, Delft, Nijmegen]}
+  Norway:         {code: "no", region: Europe, words: [Norge, Oslo, Bergen, Trondheim, Stavanger]}
+  Poland:         {code: pl, region: Europe, words: [Polska, Warsaw, Warszawa, Kraków, Krakow, Wrocław, Wroclaw, Poznań, Gdańsk, Łódź, Lodz, Katowice]}
+  Portugal:       {code: pt, region: Europe, words: [Lisbon, Lisboa, Porto, Braga, Coimbra, Aveiro]}
+  Romania:        {code: ro, region: Europe, words: [România, Bucharest, București, Cluj-Napoca, Cluj, Iași, Timișoara]}
+  Serbia:         {code: rs, region: Europe, words: [Srbija, Belgrade, Beograd, Novi Sad]}
+  Slovakia:       {code: sk, region: Europe, words: [Slovensko, Bratislava, Košice]}
+  Slovenia:       {code: si, region: Europe, words: [Slovenija, Ljubljana, Maribor]}
+  Spain:          {code: es, region: Europe, words: [España, Barcelona, Madrid, Valencia, Sevilla, Seville, Málaga, Malaga, Bilbao, Zaragoza, Lleida, Sant Cugat, Granada, Alicante]}
+  Sweden:         {code: se, region: Europe, words: [Sverige, Stockholm, Gothenburg, Göteborg, Malmö, Uppsala, Lund, Södertälje]}
+  Switzerland:    {code: ch, region: Europe, words: [Schweiz, Suisse, Svizzera, Basel, Zurich, Zürich, Geneva, Genève, Lausanne, Bern, Zug, Lugano, Rotkreuz]}
+  Turkey:         {code: tr, region: Europe, words: [Türkiye, Turkiye, Istanbul, İstanbul, Ankara, Izmir, İzmir]}
+  Ukraine:        {code: ua, region: Europe, words: [Україна, Kyiv, Kiev, Lviv, Kharkiv, Odesa]}
+  United Kingdom: {code: gb, region: Europe, words: [UK, Great Britain, England, Scotland, Wales, Northern Ireland, London, Manchester, Edinburgh, Glasgow, Oxford, Bristol, Leeds, Stevenage, Belfast, Cardiff]}
+
+  # ---------------------------------------------------------------- Americas
+  Argentina:      {code: ar, region: Americas, words: [Buenos Aires, Rosario]}
+  Brazil:         {code: br, region: Americas, words: [Brasil, São Paulo, Sao Paulo, Rio de Janeiro, Belo Horizonte, Curitiba, Porto Alegre, Campinas]}
+  Canada:         {code: ca, region: Americas, words: [Toronto, Montreal, Montréal, Vancouver, Ottawa, Calgary, Ontario, Quebec, Québec, British Columbia]}
+  Chile:          {code: cl, region: Americas, words: [Santiago de Chile, Valparaíso]}
+  Colombia:       {code: co, region: Americas, words: [Bogotá, Bogota, Medellín, Medellin, Cali]}
+  Costa Rica:     {code: cr, region: Americas, words: [Heredia]}
+  Mexico:         {code: mx, region: Americas, words: [México, Mexico City, Ciudad de México, CDMX, Guadalajara, Monterrey]}
+  Peru:           {code: pe, region: Americas, words: [Perú, Lima]}
+  United States:  {code: us, region: Americas, words: [United States of America, USA, New York, Boston, San Francisco, Seattle, Chicago, Austin, San Diego, Los Angeles, South San Francisco, Philadelphia, Raritan, New Jersey, Massachusetts, California]}
+  Uruguay:        {code: uy, region: Americas, words: [Montevideo]}
+
+  # ---------------------------------------------------------------- Asia-Pacific
+  Australia:      {code: au, region: Asia-Pacific, words: [Sydney, Melbourne, Brisbane, Adelaide, Canberra, New South Wales, Queensland]}
+  China:          {code: cn, region: Asia-Pacific, words: [中国, Beijing, Shanghai, Shenzhen, Guangzhou, Hangzhou, Suzhou, Chengdu]}
+  Hong Kong:      {code: hk, region: Asia-Pacific, words: [香港]}
+  India:          {code: in, region: Asia-Pacific, words: [Bangalore, Bengaluru, Hyderabad, Pune, Mumbai, Chennai, Delhi, New Delhi, Gurgaon, Gurugram, Noida, Kolkata]}
+  Indonesia:      {code: id, region: Asia-Pacific, words: [Jakarta, Surabaya, Bandung]}
+  Japan:          {code: jp, region: Asia-Pacific, words: [日本, Tokyo, Osaka, Kyoto, Yokohama, Kobe]}
+  Malaysia:       {code: my, region: Asia-Pacific, words: [Kuala Lumpur, Penang, Petaling Jaya, Cyberjaya]}
+  New Zealand:    {code: nz, region: Asia-Pacific, words: [Aotearoa, Auckland, Wellington, Christchurch]}
+  Philippines:    {code: ph, region: Asia-Pacific, words: [Pilipinas, Manila, Metro Manila, Makati, Taguig, Quezon City, Pasig, Cebu, Davao, Mandaluyong]}
+  Singapore:      {code: sg, region: Asia-Pacific, words: []}
+  South Korea:    {code: kr, region: Asia-Pacific, words: [Korea, Republic of Korea, 대한민국, Seoul, Busan, Incheon, Pangyo]}
+  Taiwan:         {code: tw, region: Asia-Pacific, words: [臺灣, 台灣, Taipei, Hsinchu, Taichung, Kaohsiung]}
+  Thailand:       {code: th, region: Asia-Pacific, words: [Bangkok]}
+  Vietnam:        {code: vn, region: Asia-Pacific, words: [Viet Nam, Việt Nam, Ho Chi Minh City, Hanoi, Hà Nội, Da Nang]}
+
+  # ---------------------------------------------------------------- Middle East & Africa
+  Egypt:                {code: eg, region: Middle East & Africa, words: [Cairo]}
+  Israel:               {code: il, region: Middle East & Africa, words: [Tel Aviv, Jerusalem, Haifa, Herzliya, Rehovot]}
+  Kenya:                {code: ke, region: Middle East & Africa, words: [Nairobi, Mombasa]}
+  Morocco:              {code: ma, region: Middle East & Africa, words: [Maroc, Casablanca, Rabat]}
+  Nigeria:              {code: ng, region: Middle East & Africa, words: [Lagos, Abuja]}
+  Qatar:                {code: qa, region: Middle East & Africa, words: [Doha]}
+  Saudi Arabia:         {code: sa, region: Middle East & Africa, words: [KSA, Riyadh, Jeddah, Dammam]}
+  South Africa:         {code: za, region: Middle East & Africa, words: [Johannesburg, Cape Town, Pretoria, Durban]}
+  United Arab Emirates: {code: ae, region: Middle East & Africa, words: [UAE, Dubai, Abu Dhabi, Sharjah]}

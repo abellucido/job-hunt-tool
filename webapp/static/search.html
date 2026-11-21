@@ -79,6 +79,12 @@
                     border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
   .dropdown .menu label { display: block; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
   .dropdown .menu label:hover { background: var(--surface); }
+  #countries { width: 280px; max-height: 340px; overflow-y: auto; padding-top: 0; }
+  #countries .search { position: sticky; top: 0; background: var(--bg); padding: 6px 0; }
+  #countries .search input { width: 100%; }
+  #countries .group { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+                      letter-spacing: .04em; padding: 8px 6px 2px; }
+  #countries .none { color: var(--muted); font-size: 14px; padding: 4px 6px; }
   select { padding: 6px 8px; }
   .companies { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
   .companies > summary { font-weight: 600; color: var(--fg); }
@@ -86,6 +92,7 @@
   .add-row input { flex: 1 1 320px; }
   .company-result { background: var(--surface); border-radius: 6px; padding: 10px 12px; font-size: 14px;
                     display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .company-result[hidden] { display: none; }
   .company-result.ok { background: #e2efe8; }
   .company-result.warn { background: #f4ecd6; }
   .company-result.bad { background: #f3e1e1; }
@@ -114,6 +121,9 @@
   .company-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .company-list .pill { font-weight: 500; }
   .company-list .sys { color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .company-list button.pill { border: 0; font-family: inherit; cursor: pointer; }
+  .company-list button.pill:hover { background: var(--line); }
+  .company-list .tag { margin-left: 6px; font-weight: 600; color: var(--run); }
 </style>
 </head>
 <body>
@@ -131,7 +141,10 @@
             <div class="field-title">Countries</div>
             <details class="dropdown" id="countries-dd">
               <summary id="countries-label">Spain</summary>
-              <div class="menu" id="countries"></div>
+              <div class="menu" id="countries">
+                <div class="search"><input type="text" id="country-search" placeholder="Type to find a country…" autocomplete="off"></div>
+                <div id="country-list"></div>
+              </div>
             </details>
           </div>
           <div>
@@ -251,9 +264,10 @@ async function init() {
   $("#cv-info").innerHTML = `Tailoring uses <code>${esc(settings.cv.path)}</code> (last edited ${esc(settings.cv.modified)}). ` +
     `Up to ${settings.max_parallel} applications run at once.`;
   const saved = recall("search", {});
+  const allCountries = [...settings.countries, ...settings.all_countries];
   const defaultCountry = settings.countries.includes("Spain") ? "Spain" : settings.countries[0];
-  $("#countries").innerHTML = settings.countries.map((c) =>
-    `<label><input type="checkbox" value="${esc(c)}" ${c === defaultCountry ? "checked" : ""}> ${esc(c)}</label>`).join("");
+  const chosen = (saved.countries || []).filter((c) => allCountries.includes(c));
+  renderCountries(chosen.length ? chosen : [defaultCountry]);
   updateCountriesLabel();
   $("#terms").value = (saved.terms || settings.search_terms).join("\n");
   if (saved.max_age_days) $("#max-age").value = String(saved.max_age_days);
@@ -446,11 +460,47 @@ $("#fit-btn").addEventListener("click", () => {
 });
 $("#clear-btn").addEventListener("click", () => { selected.clear(); $("#check-all").checked = false; renderJobs(); });
 
-const chosenCountries = () => [...document.querySelectorAll("#countries input:checked")].map((c) => c.value);
+const chosenCountries = () => [...document.querySelectorAll("#country-list input:checked")].map((c) => c.value);
 function updateCountriesLabel() {
   const c = chosenCountries();
   $("#countries-label").textContent = c.length ? c.join(", ") : "Choose countries…";
 }
+function renderCountries(chosen) {
+  const item = (c) => `<label data-name="${esc(c.toLowerCase())}"><input type="checkbox" value="${esc(c)}" ${chosen.includes(c) ? "checked" : ""}> ${esc(c)}</label>`;
+  $("#country-list").innerHTML =
+    `<div class="group" title="Countries with your own list of places in jobscout/config.yaml">Your countries</div>` +
+    settings.countries.map(item).join("") +
+    `<div class="group" title="From jobscout/countries.yaml">All countries</div>` +
+    settings.all_countries.map(item).join("") +
+    `<div class="none" hidden>No country matches. Add it to <code>jobscout/countries.yaml</code>.</div>`;
+}
+function filterCountries() {
+  const q = $("#country-search").value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("#country-list label").forEach((l) => {
+    const hit = !q || l.dataset.name.includes(q);
+    l.hidden = !hit;
+    shown += hit;
+  });
+  document.querySelectorAll("#country-list .group").forEach((g) => g.hidden = !!q);
+  document.querySelector("#country-list .none").hidden = shown > 0;
+}
+$("#country-search").addEventListener("input", filterCountries);
+$("#country-search").addEventListener("keydown", (e) => {      // Enter ticks the only (or first) match
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const first = [...document.querySelectorAll("#country-list label")].find((l) => !l.hidden);
+  if (!first) return;
+  const box = first.querySelector("input");
+  box.checked = !box.checked;
+  updateCountriesLabel();
+  $("#country-search").value = "";
+  filterCountries();
+});
+$("#countries-dd").addEventListener("toggle", () => {
+  if ($("#countries-dd").open) $("#country-search").focus();
+  else { $("#country-search").value = ""; filterCountries(); }
+});
 $("#countries").addEventListener("change", updateCountriesLabel);
 document.addEventListener("click", (e) => {     // close the dropdown when clicking elsewhere
   if (!$("#countries-dd").contains(e.target)) $("#countries-dd").open = false;
@@ -548,9 +598,28 @@ const SYSTEM_LABELS = {workday: "Workday", greenhouse: "Greenhouse", lever: "Lev
 async function loadCompanies() {
   const list = await api("/api/companies");
   $("#companies-summary").textContent = `Companies searched (${list.length})`;
+  companyList = list;
   $("#company-list").innerHTML = list.map((c) =>
-    `<span class="pill" title="${esc(SYSTEM_LABELS[c.system])}: ${esc(c.detail)}">${esc(c.name)}<span class="sys">${esc(SYSTEM_LABELS[c.system])}</span></span>`).join("");
+    `<button class="pill company" data-key="${esc(c.system)}:${esc(c.id)}"
+       title="${esc(SYSTEM_LABELS[c.system])}: ${esc(c.detail)}. Searched for ${esc(c.countries.length ? c.countries.join(", ") : "every country")}. Click to change.">${esc(c.name)}<span class="sys">${esc(SYSTEM_LABELS[c.system])}</span>${
+       c.countries.length ? `<span class="tag">${esc(c.countries.join(", "))}</span>` : ""}</button>`).join("");
 }
+let companyList = [];
+
+$("#company-list").addEventListener("click", async (e) => {
+  const pill = e.target.closest("[data-key]");
+  if (!pill) return;
+  const c = companyList.find((x) => `${x.system}:${x.id}` === pill.dataset.key);
+  const answer = prompt(`Search ${c.name} only for these countries (comma-separated).\n` +
+    `Leave it empty to search ${c.name} for every country.`, c.countries.join(", "));
+  if (answer == null) return;
+  try {
+    const r = await api("/api/companies/countries", {method: "POST", body: JSON.stringify(
+      {system: c.system, id: c.id, countries: answer.split(",").map((s) => s.trim()).filter(Boolean)})});
+    showCompanyResult(r.ok ? "ok" : "bad", esc(r.message));
+    await loadCompanies();
+  } catch (err) { showCompanyResult("bad", esc(err.message)); }
+});
 
 function showCompanyResult(kind, html) {
   const box = $("#company-result");
@@ -579,7 +648,9 @@ async function checkCompany() {
       showCompanyResult(r.warning ? "warn" : "",
         `<span>Found <strong>${esc(r.source.name)}</strong> on ${esc(SYSTEM_LABELS[r.source.system])}${jobs}.</span>
          ${r.warning ? `<span>${esc(r.warning)}</span>` : ""}
-         ${nameField}<button id="company-add">Add</button>`);
+         ${nameField}<label class="small">Only for <input type="text" id="company-countries" placeholder="all countries"
+           title="Comma-separated, e.g. Spain, Portugal. Empty: searched for every country" style="width:160px"></label>
+         <button id="company-add">Add</button>`);
     } else if (r.status === "not_found") {
       const sim = r.similar.length ? ` Did you mean: ${r.similar.map(esc).join(", ")}?` : "";
       showCompanyResult("warn", `${esc(r.message)}${sim}`);
@@ -597,6 +668,7 @@ $("#company-result").addEventListener("click", async (e) => {
   e.target.disabled = true;
   const nameInput = $("#company-name");
   if (nameInput && nameInput.value.trim()) pendingSource.name = nameInput.value.trim();
+  pendingSource.countries = ($("#company-countries")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
   try {
     const r = await api("/api/companies", {method: "POST", body: JSON.stringify(pendingSource)});
     showCompanyResult(r.ok ? "ok" : "bad", esc(r.message));

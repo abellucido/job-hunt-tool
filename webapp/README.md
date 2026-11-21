@@ -11,7 +11,8 @@ cd webapp
 The home page is the **Dashboard**: what's ready to send, what needs a follow-up, weekly activity
 and the best matches from the latest search. The steps below happen on the **Search** page.
 
-1. **Search:** choose countries, how recent, and keywords, then *Search jobs*.
+1. **Search:** choose countries (type in the dropdown to find one), how recent, and keywords, then
+   *Search jobs*.
    Each search is saved under `jobscout/runs/<date_time>/` and can be reopened from the dropdown.
 2. **Shortlist:** filter, read the posting text, tick the jobs you want. *Check fit* asks Claude
    how well your CV matches a job (0–100%, with each requirement matched or missing). Found a job
@@ -56,7 +57,8 @@ a terminal and shows their results, so each part can be tested on its own.
 | `webapp/tasks.json` | History of tailoring runs (created on first use; safe to delete) |
 | `webapp/start.sh` | Creates `.venv` if needed and starts the server |
 | `jobscout/jobscout.py` | Searches career sites, filters, scores, writes `runs/<run>/` |
-| `jobscout/config.yaml` | Countries, keywords, sources, scoring rules |
+| `jobscout/config.yaml` | Your countries (with your own place lists), keywords, sources, scoring rules |
+| `jobscout/countries.yaml` | Every other country the search offers: other names, main cities, ISO code, region |
 | `jobscout/seen.sqlite` | Every posting seen before; drives the NEW marker |
 | `~/.claude/skills/apply/SKILL.md` | The tailoring instructions Claude follows |
 
@@ -64,7 +66,7 @@ a terminal and shows their results, so each part can be tested on its own.
 
 | Endpoint | Used for |
 |---|---|
-| `GET /api/settings` | Countries and default keywords from `config.yaml`, CV info |
+| `GET /api/settings` | Countries (`config.yaml` and `countries.yaml`), default keywords, CV info |
 | `GET /api/runs`, `GET /api/runs/<run>` | List saved searches; load one shortlist |
 | `GET /api/companies` | Companies jobscout searches |
 | `POST /api/companies/check` | Is a company (name or link) already included? If not, find and test its job board |
@@ -166,9 +168,11 @@ Choosing a status beyond *Not applied yet* without an applied date sets the date
 
 | I want to… | Change |
 |---|---|
-| Add a country | `jobscout/config.yaml` → `locations:` add `Germany: [Germany, Berlin, Munich, …]`. It appears in the dropdown automatically. For SmartRecruiters, also add its code in `smartrecruiters()` in `jobscout.py` |
+| Add a country | Most are already in the dropdown (from `jobscout/countries.yaml`). A missing one: add a line to `countries.yaml` with its code, region and cities |
+| Search a country more precisely | Add it to `jobscout/config.yaml` → `locations:` with your own place list, e.g. smaller towns or company sites (`Switzerland: [..., Kaiseraugst, Rotkreuz]`). That list replaces the one in `countries.yaml` and the country moves to *Your countries* |
 | Add a company | On the page: *Search → Companies searched*, type the name or paste a link to one of its jobs, *Check*, then *Add*. Or edit `config.yaml` → `sources:` by hand (see `jobscout/README.md`, "Adding companies") |
 | Remove a company | Delete its line in `config.yaml` (or put `#` in front of it), then restart |
+| Search a company only for some countries | *Companies searched*: click the company and type its countries (e.g. `Spain`), or fill in *Only for* when adding it. Saved in `config.yaml` → `company_countries:`. Leave it empty to search the company for every country |
 | Change default keywords | `config.yaml` → `search_terms:` (the page remembers your last edits in the browser) |
 | Change scoring or verdicts | `config.yaml` → `keywords`, `gaps`, `title_points`, `thresholds` |
 | Fix "rate limited" failures | `config.yaml` → raise `workday_pace_seconds` (e.g. 1.5). Lower it for faster searches. A Workday group that still refuses is skipped for the rest of that search |

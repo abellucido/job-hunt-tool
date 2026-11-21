@@ -39,7 +39,51 @@ def list_companies(config_path: Path) -> list[dict]:
            for e in src.get("workday", [])]
     for system in ("greenhouse", "lever", "smartrecruiters"):
         out += [{"name": s[:1].upper() + s[1:], "system": system, "id": s, "detail": s} for s in src.get(system) or []]
+    tags = {k.lower(): v for k, v in (cfg.get("company_countries") or {}).items()}
+    for c in out:
+        c["countries"] = tags.get(f"{c['system']}:{c['id']}".lower(), [])
     return sorted(out, key=lambda c: c["name"].lower())
+
+
+def set_countries(config_path: Path, system: str, ident: str, countries: list[str]) -> dict:
+    """Search a company only for these countries (empty list: for every country). Edits the
+    company_countries section of config.yaml as text, so the file's comments stay."""
+    company = find_existing(list_companies(config_path), system=system, ident=ident)
+    if not company:
+        return {"ok": False, "message": "That company isn't in config.yaml."}
+    key = f"{system}:{company['id']}"
+    lines = config_path.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, l in enumerate(lines) if re.match(r"company_countries:", l)), None)
+    if start is None:                                   # older config.yaml: add the section
+        at = next(i for i, l in enumerate(lines) if re.match(r"max_results_per_term:", l))
+        lines[at:at] = ["# Companies searched only for some countries (\"system:id\": [countries]). A company not listed here",
+                        "# is searched for every country. Set from the Search page: click a company under Companies searched.",
+                        "company_countries:", ""]
+        start = at + 2
+    end = start + 1
+    while end < len(lines) and (lines[end].startswith((" ", "\t")) or not lines[end].strip()) and lines[end].strip():
+        end += 1
+    block = [l for l in lines[start + 1:end] if not re.match(rf'\s*"?{re.escape(key)}"?\s*:', l, re.I)]
+    if countries:
+        block.append(f'  "{key}": [{", ".join(countries)}]')
+    lines[start + 1:end] = block
+    if lines[start].strip() == "company_countries:" and not block:
+        lines[start] = "company_countries: {}"
+    elif lines[start].strip() == "company_countries: {}" and block:
+        lines[start] = "company_countries:"
+
+    backup = config_path.with_suffix(".yaml.bak")
+    shutil.copy(config_path, backup)
+    config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:                                                # make sure the file still reads as intended
+        now = find_existing(list_companies(config_path), system=system, ident=ident)["countries"]
+        if [c.lower() for c in now] != [c.lower() for c in countries]:
+            raise ValueError("the change didn't stick")
+    except Exception as e:
+        shutil.copy(backup, config_path)
+        return {"ok": False, "message": f"Couldn't update config.yaml ({e}); nothing was changed."}
+    where = ", ".join(countries) if countries else "every country"
+    return {"ok": True, "message": f"{company['name']} will be searched for {where}."}
 
 
 def find_existing(companies: list[dict], name: str = "", system: str = "", ident: str = "") -> dict | None:

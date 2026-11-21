@@ -59,6 +59,10 @@ class Job:
         return re.sub(r"[?#].*$", "", self.url)
 
 
+class NoJobsHere(Exception):
+    """The company's career site lists no jobs in the chosen countries, so it isn't searched."""
+
+
 # ------------------------------------------------------------------ http
 
 SESSION = requests.Session()
@@ -138,6 +142,38 @@ def parse_date(s):
 
 # ------------------------------------------------------------------ location matching
 
+def load_countries():
+    """countries.yaml: every country the search can use, with other names, main cities and region."""
+    return yaml.safe_load((HERE / "countries.yaml").read_text(encoding="utf-8"))
+
+
+def pick_countries(cfg, names):
+    """Location words and remote keywords for the chosen countries. A country in config.yaml's
+    `locations:` keeps its own word list; any other comes from countries.yaml."""
+    catalog = load_countries()
+    known = {k.lower(): k for k in catalog["countries"]}
+    configured = {k.lower(): k for k in cfg["locations"]}
+    locations, remote = {}, []
+    for name in names:
+        key = name.strip().lower()
+        if key in configured:
+            country = configured[key]
+            locations[country] = cfg["locations"][country]
+        elif key in known:
+            country = known[key]
+            locations[country] = [country, *catalog["countries"][country]["words"]]
+        else:
+            raise ValueError(f"Unknown country {name!r}: add it to countries.yaml or to locations: in config.yaml.")
+        remote.append(country)
+        region = catalog["countries"].get(country, {}).get("region")
+        remote += catalog["regions"].get(region, ["Europe", "EMEA", "EU"])   # not in the catalog: old default
+    # config.yaml's remote_keywords that aren't country names (e.g. a region you added) still apply
+    region_words = {w.lower() for ws in catalog["regions"].values() for w in ws}
+    remote += [k for k in cfg["remote_keywords"]
+               if k.lower() not in configured and k.lower() not in known and k.lower() not in region_words]
+    return locations, list(dict.fromkeys(remote))
+
+
 class Locator:
     def __init__(self, cfg):
         self.countries = list(cfg["locations"])
@@ -167,17 +203,27 @@ def workday(tenant, host, site, name, terms, cfg, loc):
     first = http("POST", f"{base}/jobs", json={"appliedFacets": {}, "limit": 1, "offset": 0, "searchText": ""})
     facets = {}
 
+    has_country_filter, has_remote = [], []
+
     def walk(fs):
         for f in fs:
             vals = f.get("values", [])
             if vals and "facetParameter" in vals[0]:
                 walk(vals)
             elif f.get("facetParameter") in ("locationCountry", "locations", "primaryLocation", "Location_Country"):
+                if vals:                    # the site lists where its jobs are
+                    has_country_filter.append(True)
+                if any("remote" in str(v.get("descriptor", "")).lower() for v in vals):
+                    has_remote.append(True)
                 ids = [v["id"] for v in vals if loc.facet_ok(v.get("descriptor"))]
                 if ids:
                     facets.setdefault(f["facetParameter"], ids)
 
     walk(first.get("facets", []))
+    # The site lists the countries or places it has jobs in, none is ours and none is remote: searching
+    # it worldwide would only download postings to throw away.
+    if has_country_filter and not facets and not has_remote:
+        raise NoJobsHere()
     if "locationCountry" in facets or "Location_Country" in facets:
         facets = {k: v for k, v in facets.items() if k in ("locationCountry", "Location_Country")}
     elif facets:
@@ -236,7 +282,7 @@ def lever(company, terms, cfg, loc):
 
 def smartrecruiters(company, terms, cfg, loc):
     base = f"https://api.smartrecruiters.com/v1/companies/{company}/postings"
-    codes = {"Switzerland": "ch", "Spain": "es", "Netherlands": "nl", "Poland": "pl", "Germany": "de", "France": "fr"}
+    codes = {name: c["code"] for name, c in load_countries()["countries"].items()}
     seen, out = set(), []
     for country in loc.countries:
         cc = codes.get(country)
@@ -280,7 +326,9 @@ def adzuna(cc, terms, cfg, loc):
     return out
 
 
-def build_tasks(cfg, only):
+def build_tasks(cfg, only, countries=None):
+    """(name, function, args) per company. With `countries`, companies tagged in company_countries
+    for other countries only are left out."""
     src = cfg["sources"]
     # Workday entries: [tenant, host, site] or [tenant, host, site, "Display name"]
     tasks = [(f"workday:{t[0]}", workday, (t[0], t[1], t[2], t[3] if len(t) > 3 else None))
@@ -292,6 +340,15 @@ def build_tasks(cfg, only):
         tasks += [(f"adzuna:{c}", adzuna, (c,)) for c in src.get("adzuna_countries", [])]
     if only:
         tasks = [t for t in tasks if any(o.lower() in t[0].lower() for o in only)]
+    tags = {k.lower(): v for k, v in (cfg.get("company_countries") or {}).items()}
+    if countries and tags:
+        wanted = {c.lower() for c in countries}
+        skipped = [(t[0], tags[t[0].lower()]) for t in tasks
+                   if t[0].lower() in tags and not wanted & {c.lower() for c in tags[t[0].lower()]}]
+        if skipped:
+            print(f"Not searching {len(skipped)} companies tagged for other countries: "
+                  + ", ".join(f"{n.split(':', 1)[1]} ({', '.join(c)})" for n, c in skipped))
+        tasks = [t for t in tasks if (t[0], tags.get(t[0].lower())) not in skipped]
     return tasks
 
 
@@ -452,7 +509,7 @@ def main():
     ap.add_argument("--terms", nargs="+", help="override search_terms")
     ap.add_argument("--new-only", action="store_true", help="hide postings seen in earlier runs")
     ap.add_argument("--include-skips", action="store_true", help="also list Skip verdicts in the report")
-    ap.add_argument("--countries", nargs="+", help="only these countries from the locations config")
+    ap.add_argument("--countries", nargs="+", help="search these countries (from config.yaml locations or countries.yaml)")
     ap.add_argument("--run-dir", type=Path, help="where to write the report (default: runs/<today>)")
     ap.add_argument("--max-age-days", type=int, help="only postings from the last N days (overrides config)")
     args = ap.parse_args()
@@ -463,16 +520,14 @@ def main():
     if args.max_age_days:
         cfg["max_age_days"] = args.max_age_days
     if args.countries:
-        wanted = {c.lower() for c in args.countries}
-        cfg["locations"] = {k: v for k, v in cfg["locations"].items() if k.lower() in wanted}
-        if not cfg["locations"]:
-            sys.exit(f"No configured country matches {args.countries}.")
-        cfg["remote_keywords"] = [k for k in cfg["remote_keywords"]
-                                  if k.lower() in wanted or k in ("Europe", "EMEA", "EU")]
+        try:
+            cfg["locations"], cfg["remote_keywords"] = pick_countries(cfg, args.countries)
+        except ValueError as e:
+            sys.exit(str(e))
     cfg["title_exclude"] = re.compile(re.sub(r"\n\s*", "", cfg["title_exclude"]), re.I)
     terms = args.terms or cfg["search_terms"]
     loc, scorer = Locator(cfg), Scorer(cfg)
-    tasks = build_tasks(cfg, args.only)
+    tasks = build_tasks(cfg, args.only, list(cfg["locations"]) if args.countries else None)
     if not tasks:
         sys.exit("No sources selected.")
 
@@ -485,8 +540,13 @@ def main():
         for name, fut in futs.items():
             try:
                 found = fut.result()
+                for j in found:
+                    j.task = name               # which company it came from, for the summary below
                 jobs += found
                 print(f"  {name:32s} {len(found):4d}")
+            except NoJobsHere:
+                stats.setdefault("no_jobs_here", []).append(name)
+                print(f"  {name:32s}    - no jobs in {', '.join(loc.countries)}")
             except Exception as e:
                 stats["errors"].append(name)
                 print(f"  {name:32s} FAILED: {e}", file=sys.stderr)
@@ -522,6 +582,11 @@ def main():
     cutoff = TODAY - dt.timedelta(days=cfg["max_age_days"])
     jobs = [j for j in jobs if loc.matches(j.locations) and (j.posted is None or j.posted >= cutoff)]
     stats["in_location"] = len(jobs)
+    with_jobs = sorted({getattr(j, "task", j.company).split(":", 1)[-1] for j in jobs})
+    print(f"\nCompanies with jobs in {', '.join(loc.countries)}: {len(with_jobs)} of {len(tasks)} searched"
+          + (f" ({', '.join(with_jobs)})" if with_jobs else "")
+          + (". Few of your companies hire here: consider adding local ones (Companies searched)."
+             if len(with_jobs) < max(3, len(tasks) // 5) else "."))
 
     # 4. score, remember, report
     for j in jobs:

@@ -81,6 +81,12 @@ sources:
   # Descriptions are truncated to ~500 chars, so scores are less reliable.
   adzuna_countries: [ch, es, nl, pl]
 
+# Companies searched only for some countries ("system:id": [countries]). A company not listed here
+# is searched for every country. Set from the Search page: click a company under Companies searched.
+company_countries:
+  "workday:enagas": [Spain]
+  "greenhouse:typeform": [Spain]
+
 max_results_per_term: 60   # per company and search term
 max_workers: 6             # parallel requests (be polite)
 # Workday blocks bursts per server group (wd1, wd3, wd5…). Seconds between requests to one

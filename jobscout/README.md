@@ -30,7 +30,9 @@ Output goes to `runs/<date>/`:
    - SmartRecruiters: Bosch
    - Adzuna (optional): an aggregator of many job boards. Get a free key at
      https://developer.adzuna.com, then `export ADZUNA_APP_ID=… ADZUNA_APP_KEY=…`.
-2. **Filter** by location (`locations` in config.yaml), title exclusions and posting age.
+2. **Filter** by location, title exclusions and posting age. A country's places come from
+   `locations` in config.yaml if it's there, otherwise from `countries.yaml` (about 70 countries:
+   other names, main cities, and the region words that let fully remote jobs through, e.g. "Remote, EMEA").
 3. **Score** each posting: CV keywords found (3/2/1 points), plus title points, minus 1 per gap.
 4. **Verdict:** score ≥ 30 → Apply, ≥ 20 → Long shot, otherwise Skip. Then:
    - a *required* language you lack (German, French, Dutch, Polish …), or a posting written in
@@ -39,6 +41,22 @@ Output goes to `runs/<date>/`:
    - "German is a plus" is only noted.
 
 The verdict is a keyword pre-screen. `/apply` does the real requirement-by-requirement analysis.
+
+## Companies and countries
+
+Most companies hire in many countries, so by default every company is searched whatever countries
+you choose. Two things keep a search from wasting requests on companies that don't hire there:
+
+- **Automatic skip (Workday).** A Workday career site lists the countries or places it has jobs in.
+  If none is in the chosen countries and none of its jobs is remote, the company is skipped and the
+  log says `no jobs in <country>`. Without this it would be searched worldwide and every posting
+  downloaded only to be thrown away.
+- **Country tags** (`company_countries:` in config.yaml), for local companies:
+  `"workday:enagas": [Spain]` searches Enagás only when Spain is among the chosen countries. The key
+  is `system:id` as in `sources:`. Set them on the Search page by clicking a company.
+
+At the end of a search the log says how many companies had jobs in the chosen countries
+(`Companies with jobs in Germany: 7 of 33 searched`). When few do, add some local companies.
 
 ## Adding companies
 

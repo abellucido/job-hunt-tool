@@ -122,8 +122,11 @@ def folder_files(folder: str | None) -> list[str]:
 @app.get("/api/settings")
 def settings():
     cfg = yaml.safe_load((JOBSCOUT / "config.yaml").read_text(encoding="utf-8"))
+    mine = list(cfg["locations"])                      # countries with your own place list in config.yaml
+    others = sorted(set(jobscout.load_countries()["countries"]) - set(mine))
     return {
-        "countries": list(cfg["locations"]),
+        "countries": mine,
+        "all_countries": others,                       # every other country in jobscout/countries.yaml
         "search_terms": cfg["search_terms"],
         "cv": {"path": str(CV_MASTER.relative_to(ROOT)),
                "modified": datetime.fromtimestamp(CV_MASTER.stat().st_mtime).strftime("%Y-%m-%d %H:%M")},
@@ -220,6 +223,7 @@ class CompanySource(BaseModel):
     host: str = ""
     site: str = ""
     name: str = ""
+    countries: list[str] = []      # search it only for these (empty: every country)
 
 
 @app.get("/api/companies")
@@ -234,11 +238,48 @@ async def check_company(q: CompanyQuery):
     return await run_in_threadpool(companies.check, CONFIG, q.query)
 
 
+class CompanyCountries(BaseModel):
+    system: str
+    id: str
+    countries: list[str] = []
+
+
+def country_names() -> dict[str, str]:
+    """Every country the search knows, lower-case → proper name."""
+    cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    names = list(cfg["locations"]) + list(jobscout.load_countries()["countries"])
+    return {n.lower(): n for n in names}
+
+
+def clean_countries(countries: list[str]) -> list[str]:
+    known = country_names()
+    out = []
+    for c in countries:
+        if c.strip() and c.strip().lower() not in known:
+            raise HTTPException(400, f"Unknown country: {c.strip()}")
+        if c.strip():
+            out.append(known[c.strip().lower()])
+    return list(dict.fromkeys(out))
+
+
+@app.post("/api/companies/countries")
+async def set_company_countries(req: CompanyCountries):
+    if any(s["status"] == "running" for s in searches.values()):
+        raise HTTPException(409, "A search is running. Change this when it has finished.")
+    return await run_in_threadpool(companies.set_countries, CONFIG, req.system, req.id, clean_countries(req.countries))
+
+
 @app.post("/api/companies")
 async def add_company(src: CompanySource):
     if any(s["status"] == "running" for s in searches.values()):
         raise HTTPException(409, "A search is running. Add the company when it has finished.")
-    return await run_in_threadpool(companies.add, CONFIG, src.model_dump())
+    countries = clean_countries(src.countries)
+    result = await run_in_threadpool(companies.add, CONFIG, src.model_dump(exclude={"countries"}))
+    if result.get("ok") and countries and result.get("company"):
+        tagged = await run_in_threadpool(companies.set_countries, CONFIG, result["company"]["system"],
+                                         result["company"]["id"], countries)
+        result["message"] += f" Searched only for {', '.join(countries)}." if tagged["ok"] else f" {tagged['message']}"
+    return result
 
 
 # ------------------------------------------------------------------ tracker
